@@ -1,0 +1,17 @@
+# Environnements et secrets
+venv/
+.env*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Bases de données locales
+*.sqlite3
+
+# Logs et datas
+*.log
+schema_profile.json
