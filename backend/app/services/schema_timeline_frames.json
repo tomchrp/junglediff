@@ -1,0 +1,348 @@
+{
+    "timeline_frames": {
+        "keys_profile": {
+            "xp": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 29030
+            },
+            "level": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 20
+            },
+            "position": {
+                "x": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 130,
+                    "max": 14617
+                },
+                "y": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 135,
+                    "max": 14673
+                }
+            },
+            "totalGold": {
+                "types": [
+                    "int"
+                ],
+                "min": 500,
+                "max": 25442
+            },
+            "currentGold": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 4816
+            },
+            "damageStats": {
+                "trueDamageDone": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 140113
+                },
+                "magicDamageDone": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 289975
+                },
+                "totalDamageDone": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 537224
+                },
+                "trueDamageTaken": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 12554
+                },
+                "magicDamageTaken": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 42378
+                },
+                "totalDamageTaken": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 96628
+                },
+                "physicalDamageDone": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 429597
+                },
+                "physicalDamageTaken": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 46496
+                },
+                "trueDamageDoneToChampions": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 21111
+                },
+                "magicDamageDoneToChampions": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 44793
+                },
+                "totalDamageDoneToChampions": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 67993
+                },
+                "physicalDamageDoneToChampions": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 60655
+                }
+            },
+            "championStats": {
+                "armor": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 18,
+                    "max": 866
+                },
+                "power": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 10000
+                },
+                "health": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 6873
+                },
+                "armorPen": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                },
+                "magicPen": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 48
+                },
+                "omnivamp": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 34
+                },
+                "powerMax": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 10000
+                },
+                "healthMax": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 530,
+                    "max": 7161
+                },
+                "lifesteal": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 29
+                },
+                "spellVamp": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                },
+                "powerRegen": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": -67,
+                    "max": 450
+                },
+                "attackSpeed": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 50,
+                    "max": 518
+                },
+                "ccReduction": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 75
+                },
+                "healthRegen": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 5444
+                },
+                "magicResist": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 22,
+                    "max": 261
+                },
+                "abilityHaste": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                },
+                "abilityPower": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 875
+                },
+                "attackDamage": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 44,
+                    "max": 607
+                },
+                "physicalVamp": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                },
+                "movementSpeed": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 106,
+                    "max": 887
+                },
+                "armorPenPercent": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 39
+                },
+                "magicPenPercent": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 39
+                },
+                "cooldownReduction": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                },
+                "bonusArmorPenPercent": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                },
+                "bonusMagicPenPercent": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 0,
+                    "max": 0
+                }
+            },
+            "goldPerSecond": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 90
+            },
+            "minionsKilled": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 348
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            },
+            "jungleMinionsKilled": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 248
+            },
+            "timeEnemySpentControlled": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 2653752
+            }
+        }
+    }
+}

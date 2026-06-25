@@ -1,0 +1,1137 @@
+{
+    "PAUSE_END": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "PAUSE_END"
+                ]
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 0
+            },
+            "realTimestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 1781381983778,
+                "max": 1782221795713
+            }
+        }
+    },
+    "ITEM_PURCHASED": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "ITEM_PURCHASED"
+                ]
+            },
+            "itemId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1001,
+                "max": 8010
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 2538700
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            }
+        }
+    },
+    "SKILL_LEVEL_UP": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "SKILL_LEVEL_UP"
+                ]
+            },
+            "skillSlot": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 4
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 2516813
+            },
+            "levelUpType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "EVOLVE",
+                    "NORMAL"
+                ]
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            }
+        }
+    },
+    "ITEM_UNDO": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "ITEM_UNDO"
+                ]
+            },
+            "afterId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 6675
+            },
+            "beforeId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 6694
+            },
+            "goldGain": {
+                "types": [
+                    "int"
+                ],
+                "min": -1855,
+                "max": 2100
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 9208,
+                "max": 2049616
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            }
+        }
+    },
+    "WARD_PLACED": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "WARD_PLACED"
+                ]
+            },
+            "wardType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BLUE_TRINKET",
+                    "CONTROL_WARD",
+                    "SIGHT_WARD",
+                    "TEEMO_MUSHROOM",
+                    "UNDEFINED",
+                    "YELLOW_TRINKET"
+                ]
+            },
+            "creatorId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 2544903
+            }
+        }
+    },
+    "ITEM_DESTROYED": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "ITEM_DESTROYED"
+                ]
+            },
+            "itemId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1001,
+                "max": 8010
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 5796,
+                "max": 2538700
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            }
+        }
+    },
+    "LEVEL_UP": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "LEVEL_UP"
+                ]
+            },
+            "level": {
+                "types": [
+                    "int"
+                ],
+                "min": 2,
+                "max": 20
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 67625,
+                "max": 2515578
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            }
+        }
+    },
+    "TURRET_PLATE_DESTROYED": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "TURRET_PLATE_DESTROYED"
+                ]
+            },
+            "teamId": {
+                "types": [
+                    "int"
+                ],
+                "min": 100,
+                "max": 200
+            },
+            "killerId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            },
+            "laneType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BOT_LANE",
+                    "MID_LANE",
+                    "TOP_LANE"
+                ]
+            },
+            "position": {
+                "x": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 981,
+                    "max": 13866
+                },
+                "y": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 1029,
+                    "max": 13875
+                }
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 138043,
+                "max": 2557016
+            }
+        }
+    },
+    "CHAMPION_KILL": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "CHAMPION_KILL"
+                ]
+            },
+            "bounty": {
+                "types": [
+                    "int"
+                ],
+                "min": 99,
+                "max": 420
+            },
+            "killerId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            },
+            "position": {
+                "x": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 754,
+                    "max": 14284
+                },
+                "y": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 570,
+                    "max": 14054
+                }
+            },
+            "victimId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 47283,
+                "max": 2538151
+            },
+            "shutdownBounty": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 700
+            },
+            "killStreakLength": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 13
+            },
+            "victimDamageDealt": {
+                "item_schema": {
+                    "name": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "type": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "MINION",
+                            "OTHER"
+                        ]
+                    },
+                    "basic": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "spellName": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "spellSlot": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": -1,
+                        "max": 3144
+                    },
+                    "trueDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2160
+                    },
+                    "magicDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1911
+                    },
+                    "participantId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 10
+                    },
+                    "physicalDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2644
+                    }
+                }
+            },
+            "victimDamageReceived": {
+                "item_schema": {
+                    "name": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "type": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "MINION",
+                            "MONSTER",
+                            "OTHER",
+                            "TOWER"
+                        ]
+                    },
+                    "basic": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "spellName": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "spellSlot": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": -1,
+                        "max": 3144
+                    },
+                    "trueDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2000
+                    },
+                    "magicDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1911
+                    },
+                    "participantId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 10
+                    },
+                    "physicalDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 3531
+                    }
+                }
+            },
+            "victimTeamfightDamageDealt": {
+                "item_schema": {
+                    "name": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "type": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "MINION",
+                            "OTHER"
+                        ]
+                    },
+                    "basic": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "spellName": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "spellSlot": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": -1,
+                        "max": 3144
+                    },
+                    "trueDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2160
+                    },
+                    "magicDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1911
+                    },
+                    "participantId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 10
+                    },
+                    "physicalDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2644
+                    }
+                }
+            },
+            "victimTeamfightDamageReceived": {
+                "item_schema": {
+                    "name": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "type": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "MINION",
+                            "MONSTER",
+                            "OTHER",
+                            "TOWER"
+                        ]
+                    },
+                    "basic": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "spellName": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "spellSlot": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": -1,
+                        "max": 3144
+                    },
+                    "trueDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2000
+                    },
+                    "magicDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1911
+                    },
+                    "participantId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 10
+                    },
+                    "physicalDamage": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 3531
+                    }
+                }
+            },
+            "assistingParticipantIds": {
+                "item_schema": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 1,
+                    "max": 10
+                }
+            }
+        }
+    },
+    "CHAMPION_SPECIAL_KILL": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "CHAMPION_SPECIAL_KILL"
+                ]
+            },
+            "killType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "KILL_ACE",
+                    "KILL_FIRST_BLOOD",
+                    "KILL_MULTI"
+                ]
+            },
+            "killerId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            },
+            "position": {
+                "x": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 704,
+                    "max": 14316
+                },
+                "y": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 922,
+                    "max": 14069
+                }
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 47283,
+                "max": 2523134
+            },
+            "multiKillLength": {
+                "types": [
+                    "int"
+                ],
+                "min": 2,
+                "max": 4
+            }
+        }
+    },
+    "ITEM_SOLD": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "ITEM_SOLD"
+                ]
+            },
+            "itemId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1001,
+                "max": 6692
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 259896,
+                "max": 2536629
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            }
+        }
+    },
+    "WARD_KILL": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "WARD_KILL"
+                ]
+            },
+            "killerId": {
+                "types": [
+                    "int"
+                ],
+                "min": 1,
+                "max": 10
+            },
+            "wardType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BLUE_TRINKET",
+                    "CONTROL_WARD",
+                    "SIGHT_WARD",
+                    "TEEMO_MUSHROOM",
+                    "UNDEFINED",
+                    "YELLOW_TRINKET"
+                ]
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 36827,
+                "max": 2519945
+            }
+        }
+    },
+    "ELITE_MONSTER_KILL": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "ELITE_MONSTER_KILL"
+                ]
+            },
+            "bounty": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 1000
+            },
+            "killerId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            },
+            "position": {
+                "x": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 4293,
+                    "max": 10613
+                },
+                "y": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 4397,
+                    "max": 10844
+                }
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 336918,
+                "max": 2437585
+            },
+            "monsterType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BARON_NASHOR",
+                    "DRAGON",
+                    "HORDE",
+                    "RIFTHERALD"
+                ]
+            },
+            "killerTeamId": {
+                "types": [
+                    "int"
+                ],
+                "min": 100,
+                "max": 300
+            },
+            "monsterSubType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "AIR_DRAGON",
+                    "CHEMTECH_DRAGON",
+                    "EARTH_DRAGON",
+                    "ELDER_DRAGON",
+                    "FIRE_DRAGON",
+                    "HEXTECH_DRAGON",
+                    "WATER_DRAGON"
+                ]
+            },
+            "assistingParticipantIds": {
+                "item_schema": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 1,
+                    "max": 10
+                }
+            }
+        }
+    },
+    "BUILDING_KILL": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BUILDING_KILL"
+                ]
+            },
+            "bounty": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 500
+            },
+            "teamId": {
+                "types": [
+                    "int"
+                ],
+                "min": 100,
+                "max": 200
+            },
+            "killerId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 10
+            },
+            "laneType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BOT_LANE",
+                    "MID_LANE",
+                    "TOP_LANE"
+                ]
+            },
+            "position": {
+                "x": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 981,
+                    "max": 13866
+                },
+                "y": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 1029,
+                    "max": 13875
+                }
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 598790,
+                "max": 2551115
+            },
+            "towerType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "BASE_TURRET",
+                    "INNER_TURRET",
+                    "NEXUS_TURRET",
+                    "OUTER_TURRET"
+                ]
+            },
+            "buildingType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "INHIBITOR_BUILDING",
+                    "TOWER_BUILDING"
+                ]
+            },
+            "assistingParticipantIds": {
+                "item_schema": {
+                    "types": [
+                        "int"
+                    ],
+                    "min": 1,
+                    "max": 10
+                }
+            }
+        }
+    },
+    "DRAGON_SOUL_GIVEN": {
+        "keys_profile": {
+            "name": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "Chemtech",
+                    "Cloud",
+                    "Hextech",
+                    "Infernal",
+                    "Mountain",
+                    "Ocean"
+                ]
+            },
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "DRAGON_SOUL_GIVEN"
+                ]
+            },
+            "teamId": {
+                "types": [
+                    "int"
+                ],
+                "min": 0,
+                "max": 200
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 674090,
+                "max": 2051728
+            }
+        }
+    },
+    "GAME_END": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "GAME_END"
+                ]
+            },
+            "gameId": {
+                "types": [
+                    "int"
+                ],
+                "min": 7886444725,
+                "max": 7896618629
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 1027026,
+                "max": 2562897
+            },
+            "winningTeam": {
+                "types": [
+                    "int"
+                ],
+                "min": 100,
+                "max": 200
+            },
+            "realTimestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 1781383010864,
+                "max": 1782224358706
+            }
+        }
+    },
+    "OBJECTIVE_BOUNTY_PRESTART": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "OBJECTIVE_BOUNTY_PRESTART"
+                ]
+            },
+            "teamId": {
+                "types": [
+                    "int"
+                ],
+                "min": 100,
+                "max": 200
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 845287,
+                "max": 2115295
+            },
+            "actualStartTime": {
+                "types": [
+                    "int"
+                ],
+                "min": 860000,
+                "max": 2130000
+            }
+        }
+    },
+    "OBJECTIVE_BOUNTY_FINISH": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "OBJECTIVE_BOUNTY_FINISH"
+                ]
+            },
+            "teamId": {
+                "types": [
+                    "int"
+                ],
+                "min": 100,
+                "max": 200
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 950338,
+                "max": 1885509
+            }
+        }
+    },
+    "CHAMPION_TRANSFORM": {
+        "keys_profile": {
+            "type": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "CHAMPION_TRANSFORM"
+                ]
+            },
+            "timestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 754044,
+                "max": 979518
+            },
+            "participantId": {
+                "types": [
+                    "int"
+                ],
+                "min": 7,
+                "max": 7
+            },
+            "transformType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "SLAYER"
+                ]
+            }
+        }
+    }
+}

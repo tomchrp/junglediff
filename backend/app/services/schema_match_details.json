@@ -1,0 +1,2502 @@
+{
+    "match_details": {
+        "keys_profile": {
+            "mapId": {
+                "types": [
+                    "int"
+                ],
+                "min": 11,
+                "max": 11
+            },
+            "teams": {
+                "item_schema": {
+                    "win": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "bans": {
+                        "item_schema": {
+                            "pickTurn": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 1,
+                                "max": 10
+                            },
+                            "championId": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": -1,
+                                "max": 950
+                            }
+                        }
+                    },
+                    "teamId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 100,
+                        "max": 200
+                    },
+                    "objectives": {
+                        "baron": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 2
+                            }
+                        },
+                        "horde": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 3
+                            }
+                        },
+                        "tower": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 12
+                            }
+                        },
+                        "dragon": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 5
+                            }
+                        },
+                        "atakhan": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 0
+                            }
+                        },
+                        "champion": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 6,
+                                "max": 52
+                            }
+                        },
+                        "inhibitor": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 7
+                            }
+                        },
+                        "riftHerald": {
+                            "first": {
+                                "types": [
+                                    "bool"
+                                ]
+                            },
+                            "kills": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 0,
+                                "max": 1
+                            }
+                        }
+                    }
+                }
+            },
+            "gameId": {
+                "types": [
+                    "int"
+                ],
+                "min": 7886444725,
+                "max": 7896618629
+            },
+            "queueId": {
+                "types": [
+                    "int"
+                ],
+                "min": 400,
+                "max": 420
+            },
+            "gameMode": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "CLASSIC"
+                ]
+            },
+            "gameName": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "teambuilder-match-7886444725",
+                    "teambuilder-match-7886525057",
+                    "teambuilder-match-7887630534",
+                    "teambuilder-match-7887685141",
+                    "teambuilder-match-7887724454",
+                    "teambuilder-match-7888579741",
+                    "teambuilder-match-7888803820",
+                    "teambuilder-match-7888969221",
+                    "teambuilder-match-7889772931",
+                    "teambuilder-match-7889952436",
+                    "teambuilder-match-7890767063",
+                    "teambuilder-match-7890810289",
+                    "teambuilder-match-7891405368",
+                    "teambuilder-match-7891480629",
+                    "teambuilder-match-7891794121",
+                    "teambuilder-match-7891864252",
+                    "teambuilder-match-7893900224",
+                    "teambuilder-match-7893932133",
+                    "teambuilder-match-7895133999",
+                    "teambuilder-match-7896003314",
+                    "teambuilder-match-7896046788",
+                    "teambuilder-match-7896116682",
+                    "teambuilder-match-7896282452",
+                    "teambuilder-match-7896314500",
+                    "teambuilder-match-7896559652",
+                    "teambuilder-match-7896585471",
+                    "teambuilder-match-7896618629"
+                ]
+            },
+            "gameType": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "MATCHED_GAME"
+                ]
+            },
+            "platformId": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "EUW1"
+                ]
+            },
+            "gameVersion": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "16.12.786.9679",
+                    "16.12.788.4269"
+                ]
+            },
+            "gameCreation": {
+                "types": [
+                    "int"
+                ],
+                "min": 1781381966107,
+                "max": 1782221698300
+            },
+            "gameDuration": {
+                "types": [
+                    "int"
+                ],
+                "min": 1027,
+                "max": 2562
+            },
+            "participants": {
+                "item_schema": {
+                    "win": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "lane": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "BOTTOM",
+                            "JUNGLE",
+                            "MIDDLE",
+                            "NONE",
+                            "TOP"
+                        ]
+                    },
+                    "role": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "CARRY",
+                            "DUO",
+                            "NONE",
+                            "SOLO",
+                            "SUPPORT"
+                        ]
+                    },
+                    "item0": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 8010
+                    },
+                    "item1": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 6699
+                    },
+                    "item2": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 6699
+                    },
+                    "item3": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 8010
+                    },
+                    "item4": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 8010
+                    },
+                    "item5": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 8010
+                    },
+                    "item6": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 3330,
+                        "max": 3513
+                    },
+                    "kills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 23
+                    },
+                    "perks": {
+                        "styles": {
+                            "item_schema": {
+                                "style": {
+                                    "types": [
+                                        "int"
+                                    ],
+                                    "min": 8000,
+                                    "max": 8400
+                                },
+                                "selections": {
+                                    "item_schema": {
+                                        "perk": {
+                                            "types": [
+                                                "int"
+                                            ],
+                                            "min": 8005,
+                                            "max": 9923
+                                        },
+                                        "var1": {
+                                            "types": [
+                                                "int"
+                                            ],
+                                            "min": -2147483648,
+                                            "max": 22511
+                                        },
+                                        "var2": {
+                                            "types": [
+                                                "int"
+                                            ],
+                                            "min": -432,
+                                            "max": 5041
+                                        },
+                                        "var3": {
+                                            "types": [
+                                                "int"
+                                            ],
+                                            "min": 0,
+                                            "max": 267
+                                        }
+                                    }
+                                },
+                                "description": {
+                                    "types": [
+                                        "str"
+                                    ],
+                                    "enumerations": [
+                                        "primaryStyle",
+                                        "subStyle"
+                                    ]
+                                }
+                            }
+                        },
+                        "statPerks": {
+                            "flex": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 5001,
+                                "max": 5010
+                            },
+                            "defense": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 5001,
+                                "max": 5013
+                            },
+                            "offense": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 5005,
+                                "max": 5008
+                            }
+                        }
+                    },
+                    "puuid": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "deaths": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 15
+                    },
+                    "teamId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 100,
+                        "max": 200
+                    },
+                    "assists": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 27
+                    },
+                    "missions": {
+                        "playerScore0": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore1": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore2": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore3": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore4": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore5": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore6": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore7": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore8": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore9": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore10": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "playerScore11": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        }
+                    },
+                    "goldSpent": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 3475,
+                        "max": 25925
+                    },
+                    "holdPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "nexusLost": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "placement": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "pushPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 9
+                    },
+                    "totalHeal": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 30,
+                        "max": 48846
+                    },
+                    "allInPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 19
+                    },
+                    "baronKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "basicPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "challenges": {
+                        "kda": {
+                            "types": [
+                                "float",
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 22
+                        },
+                        "soloKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 16
+                        },
+                        "takedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 39
+                        },
+                        "bountyGold": {
+                            "types": [
+                                "float",
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1673.4375915527344
+                        },
+                        "doubleAces": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "gameLength": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 1027.026512833,
+                            "max": 2562.8969550280003
+                        },
+                        "multikills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 8
+                        },
+                        "abilityUses": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 28,
+                            "max": 958
+                        },
+                        "buffsStolen": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 4
+                        },
+                        "perfectGame": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "flawlessAces": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "hadOpenNexus": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "quickCleanse": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "snowballsHit": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "wardsGuarded": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 5
+                        },
+                        "earliestBaron": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 1240.212985497,
+                            "max": 2098.900926135
+                        },
+                        "goldPerMinute": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 225.38985481534687,
+                            "max": 827.0539304361428
+                        },
+                        "killingSprees": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 4
+                        },
+                        "skillshotsHit": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1109
+                        },
+                        "unseenRecalls": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "wardTakedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 20
+                        },
+                        "baronTakedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "legendaryCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "maxKillDeficit": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 12
+                        },
+                        "poroExplosions": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "quickSoloKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "soloBaronKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "teamBaronKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "SWARM_KillEnemy": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "damagePerMinute": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 152.44242181010296,
+                            "max": 2165.4188607665997
+                        },
+                        "dragonTakedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 5
+                        },
+                        "lostAnInhibitor": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "turretTakedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 8
+                        },
+                        "voidMonsterKill": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 6
+                        },
+                        "SWARM_PickupGold": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "fullTeamTakedown": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "initialBuffCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "initialCrabCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "outnumberedKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 8
+                        },
+                        "pickKillWithAlly": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 31
+                        },
+                        "quickFirstTurret": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "scuttleCrabKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 8
+                        },
+                        "skillshotsDodged": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 335
+                        },
+                        "SWARM_DefeatBriar": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "epicMonsterSteals": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "firstTurretKilled": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "killParticipation": {
+                            "types": [
+                                "float",
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0.8571428571428571
+                        },
+                        "legendaryItemUsed": {
+                            "item_schema": {
+                                "types": [
+                                    "int"
+                                ],
+                                "min": 2065,
+                                "max": 8010
+                            }
+                        },
+                        "multiKillOneSpell": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "saveAllyFromDeath": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 7
+                        },
+                        "takedownsInAlcove": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "turretPlatesTaken": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 27
+                        },
+                        "HealFromMapSources": {
+                            "types": [
+                                "float",
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2490.812301635742
+                        },
+                        "SWARM_DefeatAatrox": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "SWARM_EvolveWeapon": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "SWARM_ReachLevel50": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "SWARM_Survive15Min": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "controlWardsPlaced": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 16
+                        },
+                        "stealthWardsPlaced": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 54
+                        },
+                        "12AssistStreakCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "InfernalScalePickup": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 47
+                        },
+                        "SWARM_Have3Passives": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "acesBefore15Minutes": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "deathsByEnemyChamps": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 15
+                        },
+                        "killsUnderOwnTurret": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 6
+                        },
+                        "riftHeraldTakedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "soloTurretsLategame": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 4
+                        },
+                        "teamRiftHeraldKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "dancedWithRiftHerald": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "killsNearEnemyTurret": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 12
+                        },
+                        "outnumberedNexusKill": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "teamDamagePercentage": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 0.0426306666949666,
+                            "max": 0.47565719032070164
+                        },
+                        "teamElderDragonKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "visionScorePerMinute": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 0.20469892700108924,
+                            "max": 3.890224230782736
+                        },
+                        "elderDragonMultikills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "firstTurretKilledTime": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 598.790435944,
+                            "max": 1085.55118382
+                        },
+                        "fistBumpParticipation": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "mejaisFullStackInTime": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "takedownOnFirstTurret": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "SWARM_DefeatMiniBosses": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "takedownsFirstXMinutes": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 15
+                        },
+                        "wardTakedownsBefore20M": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 9
+                        },
+                        "enemyJungleMonsterKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 34
+                        },
+                        "jungleCsBefore10Minutes": {
+                            "types": [
+                                "int",
+                                "float"
+                            ],
+                            "min": 0,
+                            "max": 86.00000008940697
+                        },
+                        "killAfterHiddenWithAlly": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 10
+                        },
+                        "landSkillShotsEarlyGame": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 316
+                        },
+                        "perfectDragonSoulsTaken": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "tookLargeDamageSurvived": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "twoWardsOneSweeperCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "alliedJungleMonsterKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 111
+                        },
+                        "maxLevelLeadLaneOpponent": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 4
+                        },
+                        "takedownsInEnemyFountain": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "effectiveHealAndShielding": {
+                            "types": [
+                                "int",
+                                "float"
+                            ],
+                            "min": 0,
+                            "max": 27789.6484375
+                        },
+                        "immobilizeAndKillWithAlly": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 25
+                        },
+                        "knockEnemyIntoTeamAndKill": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 20
+                        },
+                        "laneMinionsFirst10Minutes": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 97
+                        },
+                        "playedChampSelectPosition": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 1
+                        },
+                        "completeSupportQuestInTime": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "dodgeSkillShotsSmallWindow": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 50
+                        },
+                        "multiTurretRiftHeraldCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "survivedSingleDigitHpCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "turretsTakenWithRiftHerald": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 5
+                        },
+                        "damageTakenOnTeamPercentage": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 0.09977308205015593,
+                            "max": 0.39271903472836217
+                        },
+                        "laningPhaseGoldExpAdvantage": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "moreEnemyJungleThanOpponent": {
+                            "types": [
+                                "int",
+                                "float"
+                            ],
+                            "min": -66.00000011920929,
+                            "max": 0
+                        },
+                        "SWARM_WinWith5EvolvedWeapons": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "enemyChampionImmobilizations": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 156
+                        },
+                        "killsWithHelpFromEpicMonster": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "maxCsAdvantageOnLaneOpponent": {
+                            "types": [
+                                "int",
+                                "float"
+                            ],
+                            "min": 0,
+                            "max": 137.99999994039536
+                        },
+                        "twentyMinionsIn3SecondsCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "epicMonsterStolenWithoutSmite": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "blastConeOppositeOpponentCount": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "multikillsAfterAggressiveFlash": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "killsOnRecentlyHealedByAramPack": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "survivedThreeImmobilizesInFight": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 31
+                        },
+                        "earlyLaningPhaseGoldExpAdvantage": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "elderDragonKillsWithOpposingSoul": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "epicMonsterKillsNearEnemyJungler": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 4
+                        },
+                        "takedownsBeforeJungleMinionSpawn": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "visionScoreAdvantageLaneOpponent": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": -0.6675013303756714,
+                            "max": 2.00753116607666
+                        },
+                        "kTurretsDestroyedBeforePlatesFall": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "outerTurretExecutesBefore10Minutes": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "shortestTimeToAceFromFirstTakedown": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 5.60849648899989,
+                            "max": 49.56138805699993
+                        },
+                        "killsOnOtherLanesEarlyJungleAsLaner": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "takedownsAfterGainingLevelAdvantage": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "killedChampTookFullTeamDamageSurvived": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 1
+                        },
+                        "epicMonsterKillsWithin30SecondsOfSpawn": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "junglerTakedownsNearDamagedEpicMonster": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "getTakedownsInAllLanesEarlyJungleAsLaner": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        },
+                        "earliestDragonTakedown": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 336.91881928500004,
+                            "max": 2159.706834869
+                        },
+                        "junglerKillsEarlyJungle": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 2
+                        },
+                        "highestCrowdControlScore": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 1
+                        },
+                        "killsOnLanersEarlyJungleAsJungler": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 3
+                        },
+                        "fasterSupportQuestCompletion": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 1
+                        },
+                        "controlWardTimeCoverageInRiverOrEnemyHalf": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 0.031150681380484616,
+                            "max": 0.9539208141439022
+                        },
+                        "teleportTakedowns": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 2
+                        },
+                        "highestChampionDamage": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 1
+                        },
+                        "highestWardKills": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 1
+                        },
+                        "baronBuffGoldAdvantageOverThreshold": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 1,
+                            "max": 1
+                        },
+                        "fastestLegendary": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 801.578386169,
+                            "max": 2272.2970413010003
+                        },
+                        "earliestElderDragon": {
+                            "types": [
+                                "float"
+                            ],
+                            "min": 1836.605372291,
+                            "max": 1895.836476051
+                        }
+                    },
+                    "champLevel": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 8,
+                        "max": 20
+                    },
+                    "championId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 950
+                    },
+                    "goldEarned": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 4314,
+                        "max": 25442
+                    },
+                    "nexusKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "pentaKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "summonerId": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "timePlayed": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1026,
+                        "max": 2562
+                    },
+                    "dangerPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "doubleKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 5
+                    },
+                    "dragonKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 4
+                    },
+                    "profileIcon": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 7,
+                        "max": 7147
+                    },
+                    "quadraKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "spell1Casts": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 10,
+                        "max": 748
+                    },
+                    "spell2Casts": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 288
+                    },
+                    "spell3Casts": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 719
+                    },
+                    "spell4Casts": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 218
+                    },
+                    "summoner1Id": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 3,
+                        "max": 21
+                    },
+                    "summoner2Id": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 21
+                    },
+                    "tripleKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2
+                    },
+                    "turretKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 7
+                    },
+                    "turretsLost": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 12
+                    },
+                    "unrealKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "visionScore": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 4,
+                        "max": 166
+                    },
+                    "wardsKilled": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 20
+                    },
+                    "wardsPlaced": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 63
+                    },
+                    "PlayerScore0": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore1": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore2": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore3": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore4": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore5": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore6": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore7": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore8": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore9": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "championName": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "commandPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 35
+                    },
+                    "getBackPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 45
+                    },
+                    "onMyWayPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 45
+                    },
+                    "retreatPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 29
+                    },
+                    "summonerName": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            ""
+                        ]
+                    },
+                    "teamPosition": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "BOTTOM",
+                            "JUNGLE",
+                            "MIDDLE",
+                            "TOP",
+                            "UTILITY"
+                        ]
+                    },
+                    "PlayerScore10": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "PlayerScore11": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "assistMePings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 37
+                    },
+                    "killingSprees": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 7
+                    },
+                    "participantId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 10
+                    },
+                    "riotIdTagline": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "roleBoundItem": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1001,
+                        "max": 3158
+                    },
+                    "summonerLevel": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 11,
+                        "max": 1167
+                    },
+                    "PlayerBehavior": {
+                        "PlayerBehavior_IsHeroInCombat": {
+                            "types": [
+                                "int"
+                            ],
+                            "min": 0,
+                            "max": 0
+                        }
+                    },
+                    "firstBloodKill": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "firstTowerKill": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "inhibitorKills": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 3
+                    },
+                    "inhibitorsLost": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 7
+                    },
+                    "itemsPurchased": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 8,
+                        "max": 48
+                    },
+                    "nexusTakedowns": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "playerAugment1": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "playerAugment2": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "playerAugment3": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "playerAugment4": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "playerAugment5": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "playerAugment6": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "riotIdGameName": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "summoner1Casts": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 24
+                    },
+                    "summoner2Casts": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 25
+                    },
+                    "champExperience": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 4397,
+                        "max": 29030
+                    },
+                    "needVisionPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 6
+                    },
+                    "playerSubteamId": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "timeCCingOthers": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 270
+                    },
+                    "trueDamageDealt": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 376,
+                        "max": 140113
+                    },
+                    "trueDamageTaken": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 12554
+                    },
+                    "turretTakedowns": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 8
+                    },
+                    "enemyVisionPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 22
+                    },
+                    "firstBloodAssist": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "firstTowerAssist": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "largestMultiKill": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 4
+                    },
+                    "magicDamageDealt": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 289975
+                    },
+                    "magicDamageTaken": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 121,
+                        "max": 42378
+                    },
+                    "objectivesStolen": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "subteamPlacement": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "totalDamageDealt": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 9980,
+                        "max": 537224
+                    },
+                    "totalDamageTaken": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 7075,
+                        "max": 96628
+                    },
+                    "totalTimeCCDealt": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 2653
+                    },
+                    "totalUnitsHealed": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 18
+                    },
+                    "championTransform": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "enemyMissingPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 28
+                    },
+                    "individualPosition": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "BOTTOM",
+                            "JUNGLE",
+                            "MIDDLE",
+                            "TOP",
+                            "UTILITY"
+                        ]
+                    },
+                    "inhibitorTakedowns": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 3
+                    },
+                    "totalMinionsKilled": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1,
+                        "max": 348
+                    },
+                    "totalTimeSpentDead": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 595
+                    },
+                    "visionClearedPings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "damageSelfMitigated": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 2743,
+                        "max": 111864
+                    },
+                    "detectorWardsPlaced": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 16
+                    },
+                    "largestKillingSpree": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 14
+                    },
+                    "physicalDamageDealt": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1309,
+                        "max": 429597
+                    },
+                    "physicalDamageTaken": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 1492,
+                        "max": 46496
+                    },
+                    "teamIGNBSurrendered": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "consumablesPurchased": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 22
+                    },
+                    "damageDealtToTurrets": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 26248
+                    },
+                    "gameEndedInSurrender": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "neutralMinionsKilled": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 248
+                    },
+                    "teamEarlySurrendered": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "largestCriticalStrike": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1590
+                    },
+                    "totalHealsOnTeammates": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 19837
+                    },
+                    "wasSevereTransgressor": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "damageDealtToBuildings": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 26248
+                    },
+                    "eligibleForProgression": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "longestTimeSpentLiving": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1737
+                    },
+                    "sightWardsBoughtInGame": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 0
+                    },
+                    "damageDealtToObjectives": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 57245
+                    },
+                    "objectivesStolenAssists": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 1
+                    },
+                    "selectedRolePreferences": {
+                        "types": [
+                            "str"
+                        ]
+                    },
+                    "visionWardsBoughtInGame": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 34
+                    },
+                    "gameEndedInIGNBSurrender": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "damageDealtToEpicMonsters": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 52619
+                    },
+                    "gameEndedInEarlySurrender": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "trueDamageDealtToChampions": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 21111
+                    },
+                    "magicDamageDealtToChampions": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 44793
+                    },
+                    "totalDamageDealtToChampions": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 2616,
+                        "max": 67993
+                    },
+                    "totalAllyJungleMinionsKilled": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 161
+                    },
+                    "positionAssignedByMatchmaking": {
+                        "types": [
+                            "str"
+                        ],
+                        "enumerations": [
+                            "BOTTOM",
+                            "JUNGLE",
+                            "MIDDLE",
+                            "TOP",
+                            "UTILITY"
+                        ]
+                    },
+                    "totalEnemyJungleMinionsKilled": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 47
+                    },
+                    "causedGameEndFromIGNBSurrender": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "physicalDamageDealtToChampions": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 60655
+                    },
+                    "totalDamageShieldedOnTeammates": {
+                        "types": [
+                            "int"
+                        ],
+                        "min": 0,
+                        "max": 8751
+                    },
+                    "wasPremadeWithIGNBGameEndCauser": {
+                        "types": [
+                            "bool"
+                        ]
+                    },
+                    "wasPremadeWithSevereTransgressor": {
+                        "types": [
+                            "bool"
+                        ]
+                    }
+                }
+            },
+            "tournamentCode": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    ""
+                ]
+            },
+            "endOfGameResult": {
+                "types": [
+                    "str"
+                ],
+                "enumerations": [
+                    "GameComplete"
+                ]
+            },
+            "gameEndTimestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 1781383010640,
+                "max": 1782224358468
+            },
+            "gameStartTimestamp": {
+                "types": [
+                    "int"
+                ],
+                "min": 1781381983951,
+                "max": 1782221795860
+            }
+        }
+    }
+}

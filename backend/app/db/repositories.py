@@ -4,75 +4,101 @@ FICHIER : backend/app/db/repositories.py
 PROJET  : JungleDiff
 
 DESCRIPTION :
-Ce fichier contient les classes Repository (Data Access Objects). Il isole la 
-logique des requêtes SQL (SQLAlchemy) du reste de l'application. 
-Il inclut la logique d'Upsert (insertion ou mise à jour silencieuse) pour 
-garantir l'idempotence de l'ingestion, ainsi qu'un exemple de requête 
-d'auto-jointure pour la future vue des synergies.
+Couche d'accès aux données (Data Access Layer). Concentre les requêtes SQL 
+complexes utilisant SQLAlchemy 2.0. Déporte la charge de calcul (agrégations, 
+moyennes, tris) sur PostgreSQL pour garantir des temps de réponse minimes au 
+frontend React.
 ===============================================================================
 """
 
+from sqlalchemy import select, func, desc, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import select, and_
-from app.db.models import Player, Match, MatchParticipant
+from typing import List, Dict, Any, Optional
+
+from app.db.models import Player, MatchParticipant, Match
 
 class PlayerRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-    async def upsert_player(self, puuid: str, game_name: str, tagline: str):
+    async def get_player_by_puuid(self, puuid: str) -> Optional[Player]:
+        """Récupère les informations globales d'un joueur."""
+        query = select(Player).where(Player.puuid == puuid)
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_champion_stats_sidebar(self, puuid: str, lane: Optional[str] = None, patch: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Insère un joueur ou met à jour son Riot ID s'il a changé.
-        Utilise la clause ON CONFLICT de PostgreSQL pour garantir l'idempotence.
+        Calcule les statistiques agrégées (Sidebar) pour un joueur.
+        Filtre dynamiquement par lane ou patch si spécifié.
+        Trie par nombre de parties jouées, puis par winrate.
         """
-        stmt = insert(Player).values(
-            puuid=puuid,
-            riot_id_name=game_name,
-            riot_id_tagline=tagline
-        ).on_conflict_do_update(
-            index_elements=['puuid'],
-            set_=dict(riot_id_name=game_name, riot_id_tagline=tagline)
+        stmt = (
+            select(
+                MatchParticipant.champion_id,
+                func.count(MatchParticipant.id).label("games_played"),
+                func.sum(cast(MatchParticipant.win, Integer)).label("wins")
+            )
+            .join(Match, MatchParticipant.match_id == Match.match_id)
+            .where(MatchParticipant.puuid == puuid)
         )
-        await self.session.execute(stmt)
-        await self.session.commit()
+
+        if lane and lane.upper() != "ALL":
+            stmt = stmt.where(MatchParticipant.position == lane.upper())
+        if patch and patch.upper() != "ALL":
+            stmt = stmt.where(Match.game_version.startswith(patch))
+
+        stmt = stmt.group_by(MatchParticipant.champion_id).order_by(
+            desc("games_played"), 
+            desc("wins")
+        )
+
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        stats = []
+        for row in rows:
+            games = row.games_played
+            wins = row.wins if row.wins is not None else 0
+            winrate = round((wins / games) * 100) if games > 0 else 0
+            
+            stats.append({
+                "championId": row.champion_id,
+                "gamesPlayed": games,
+                "wins": wins,
+                "losses": games - wins,
+                "winrate": winrate
+            })
+
+        return stats
 
 class MatchRepository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-    async def get_synergies(self, puuid: str, my_lane: str, ally_lane: str, patch: str):
+    async def get_match_history_paginated(self, puuid: str, end_time: Optional[int] = None, limit: int = 10, lane: Optional[str] = None, champion_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        Exécute une auto-jointure (Self-Join) sur la table MatchParticipant pour
-        trouver les statistiques croisées entre deux positions dans la même équipe.
-        
-        Args:
-            puuid: Identifiant du joueur analysé.
-            my_lane: La position du joueur (ex: 'JUNGLE').
-            ally_lane: La position de l'allié analysé (ex: 'MIDDLE').
-            patch: Version du jeu pour filtrer les résultats pertinents.
-            
-        Returns:
-            Une liste de tuples contenant les champions alliés et les résultats.
+        Récupère les blocs de match pour l'historique avec pagination temporelle.
         """
-        # Alias pour différencier le joueur ciblé de son allié
-        from sqlalchemy.orm import aliased
-        Me = aliased(MatchParticipant)
-        Ally = aliased(MatchParticipant)
-        
         stmt = (
-            select(Ally.champion_id, Me.win)
-            .join(Ally, and_(
-                Me.match_id == Ally.match_id,
-                Me.team_id == Ally.team_id,
-                Ally.lane == ally_lane
-            ))
-            .join(Match, Me.match_id == Match.match_id)
-            .where(
-                Me.puuid == puuid,
-                Me.lane == my_lane,
-                Match.game_version.like(f"{patch}%")
-            )
+            select(Match.raw_match_data)
+            .join(MatchParticipant, Match.match_id == MatchParticipant.match_id)
+            .where(MatchParticipant.puuid == puuid)
         )
-        result = await self.session.execute(stmt)
-        return result.all()
+
+        # Remplacement du Offset par le Voyage Temporel (Filtre par date de création)
+        if end_time:
+            stmt = stmt.where(Match.creation_timestamp < end_time)
+
+        if lane and lane.upper() != "ALL":
+            stmt = stmt.where(MatchParticipant.position == lane.upper())
+        if champion_id:
+            stmt = stmt.where(MatchParticipant.champion_id == champion_id)
+
+        # On garde le tri descendant et la limite
+        stmt = stmt.order_by(desc(Match.creation_timestamp)).limit(limit)
+
+        result = await self.db.execute(stmt)
+        
+        matches = [row[0] for row in result.all()]
+        return matches

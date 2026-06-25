@@ -1,0 +1,42 @@
+/**
+ * ============================================================================
+ * FICHIER : frontend/src/index.css
+ * PROJET  : JungleDiff
+ *
+ * DESCRIPTION :
+ * Point d'entree global des styles de l'application.
+ * Importe les trois couches fondamentales de Tailwind (base, components, utilities).
+ * Applique egalement la couleur de fond sombre par defaut sur l'ensemble du body
+ * pour eviter les flashs blancs au chargement.
+ * ============================================================================
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #010a13;
+    color: #ffffff;
+  }
+}
+
+/* Personnalisation de la Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #010a13;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #1e2328;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #c8aa6e;
+}
