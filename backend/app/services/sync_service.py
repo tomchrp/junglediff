@@ -5,29 +5,53 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Cœur de la logique métier pour l'ingestion différentielle. 
-Implémente le "Triple Appel Léger" (SoloQ, Flex, Draft) et le filtre 
-anti-doublon SQL pour protéger les quotas de l'API Riot.
+Gère la synchronisation initiale (Triple Appel Léger), le Deep Fetch pour
+la pagination historique, et l'orchestration des workers ARQ avec 
+verrouillage anti-doublon des tâches.
+
+MODIFICATIONS RÉCENTES :
+- Priorisation ARQ : Routage des requêtes utilisateur à la volée vers 
+  la file 'high_priority' pour court-circuiter l'ingestion massive ('default').
+- Optimisation Quota API : Tri des parties ingérées par date d'apparition 
+  pour ne télécharger la timeline (coûteuse en jetons) que pour les 5 
+  parties les plus récentes.
 ===============================================================================
 """
 
 import time
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from arq import create_pool
 from arq.connections import RedisSettings
 
 from app.core.config import settings
-from app.db.models import Player, Match, MatchTimeline, MatchParticipant  # <-- Ajout de Match et MatchTimeline pour le filtrage
+from app.db.models import Player, Match, MatchTimeline
 from app.services.riot_client import RiotClient
 
 class SyncService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client = RiotClient(settings.RIOT_API_KEY)
+
+    @staticmethod
+    def _get_match_timestamp_approx(match_id: str) -> int:
+        """
+        Extrait la partie numérique d'un identifiant Riot (ex: EUW1_6812345678 -> 6812345678)
+        utilisée pour trier rapidement les parties de la plus récente à la plus ancienne
+        sans avoir besoin d'interroger l'API pour connaître leur date de création exacte.
+        """
+        try:
+            return int(match_id.split('_')[1])
+        except (IndexError, ValueError):
+            return 0
         
     async def sync_player_profile(self, server: str, game_name: str, tag_line: str) -> Dict[str, Any]:
+        """
+        Synchronise le profil du joueur et récupère les 20 dernières parties 
+        de chaque file majeure. Met à jour les informations de ligue.
+        """
         routing = self.client.get_routing(server)
         continent = routing["continent"]
         region = routing["region"]
@@ -56,34 +80,29 @@ class SyncService:
                     lp = entry.get("leaguePoints")
                     break
 
-        # 4. Le "Triple Appel Léger" (Filtrage natif par file)
-        # On demande 20 parties par file compétitive majeure (Coût: 3 requêtes)
+        # 4. Le "Triple Appel Léger" (Conservation de 20 par file pour la vue historique globale)
         api_tasks = [
-            self.client.get_match_ids(continent, puuid, queue=420, count=20), # Solo/Duo
-            self.client.get_match_ids(continent, puuid, queue=440, count=20), # Flex
-            self.client.get_match_ids(continent, puuid, queue=400, count=20)  # Draft
+            self.client.get_match_ids(continent, puuid, queue=420, count=20),
+            self.client.get_match_ids(continent, puuid, queue=440, count=20),
+            self.client.get_match_ids(continent, puuid, queue=400, count=20)
         ]
         
-        # Exécution parallèle pour ne pas ralentir le backend
         lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
         
-        # Aplatissement et déduplication des IDs bruts
         all_fetched_ids = set()
         for l in lists_of_ids:
             if isinstance(l, list):
                 all_fetched_ids.update(l)
                 
-        # 5. Le Filtre Anti-Doublon (Diff avec la base de données)
+        # 5. Filtre Anti-Doublon SQL
         new_match_ids = []
         if all_fetched_ids:
             query = select(Match.match_id).where(Match.match_id.in_(all_fetched_ids))
             result = await self.db.execute(query)
             existing_ids = set(result.scalars().all())
-            
-            # On ne conserve que les IDs qui ne sont pas en base
             new_match_ids = [m_id for m_id in all_fetched_ids if m_id not in existing_ids]
 
-        # 6. Sauvegarde du Profil (UPSERT)
+        # 6. Sauvegarde du Profil
         query_player = select(Player).where(Player.puuid == puuid)
         result_player = await self.db.execute(query_player)
         player = result_player.scalar_one_or_none()
@@ -105,13 +124,26 @@ class SyncService:
 
         await self.db.commit()
 
-        # 7. Transmission des Tâches Qualifiées aux Workers
+        # 7. Transmission ARQ Sécurisée avec Optimisation du Quota
         tasks_enqueued = 0
         if new_match_ids:
+            # Tri des parties de la plus récente à la plus ancienne
+            new_match_ids.sort(key=self._get_match_timestamp_approx, reverse=True)
+            
             redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-            for m_id in new_match_ids:
-                # Le Worker ne recevra plus JAMAIS d'ARAM ni de matchs déjà ingérés
-                await redis_pool.enqueue_job('process_match_ingestion', m_id, continent)
+            for i, m_id in enumerate(new_match_ids):
+                # Seules les 5 premières parties bénéficient d'un téléchargement immédiat de la timeline
+                fetch_timeline = (i < 5)
+                
+                # Routage explicite vers la file 'default' pour ne pas bloquer le frontend
+                await redis_pool.enqueue_job(
+                    'process_match_ingestion', 
+                    m_id, 
+                    continent, 
+                    fetch_timeline,
+                    _job_id=f"ingest_{m_id}",
+                    _queue_name='default'
+                )
                 tasks_enqueued += 1
             await redis_pool.aclose()
 
@@ -123,52 +155,88 @@ class SyncService:
             "tasks_enqueued": tasks_enqueued,
             "warning": "Rank ignoré (absence d'ID Riot)" if not summoner_id else None
         }
-    
-    async def trigger_timeline_prefetch(self, match_id: str, puuid: str, server: str) -> dict:
+
+    async def fetch_older_matches(self, server: str, puuid: str, start_index: int) -> Dict[str, Any]:
         """
-        Déclenche l'ingestion P0 pour le match ciblé, et P1 pour ses voisins spatiaux.
+        Déclenche la récupération de parties anciennes (Deep Fetch).
         """
         routing = self.client.get_routing(server)
         continent = routing["continent"]
 
-        # 1. Récupérer l'historique chronologique du joueur pour trouver les adjacents
-        query = (
-            select(Match.match_id)
-            .join(Match.participants)
-            .where(MatchParticipant.puuid == puuid)
-            .order_by(Match.creation_timestamp.desc())
-        )
-        result = await self.db.execute(query)
-        ordered_match_ids = result.scalars().all()
+        api_tasks = [
+            self.client.get_match_ids(continent, puuid, start=start_index, queue=420, count=20),
+            self.client.get_match_ids(continent, puuid, start=start_index, queue=440, count=20),
+            self.client.get_match_ids(continent, puuid, start=start_index, queue=400, count=20)
+        ]
+        
+        lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
+        
+        all_fetched_ids = set()
+        for l in lists_of_ids:
+            if isinstance(l, list):
+                all_fetched_ids.update(l)
+                
+        new_match_ids = []
+        if all_fetched_ids:
+            query = select(Match.match_id).where(Match.match_id.in_(all_fetched_ids))
+            result = await self.db.execute(query)
+            existing_ids = set(result.scalars().all())
+            new_match_ids = [m_id for m_id in all_fetched_ids if m_id not in existing_ids]
 
-        targets_to_fetch = [match_id] # P0 en premier
+        tasks_enqueued = 0
+        if new_match_ids:
+            redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
+            for m_id in new_match_ids:
+                # Sur du Deep Fetch (historique lointain), on désactive systématiquement 
+                # la timeline pour préserver le quota
+                await redis_pool.enqueue_job(
+                    'process_match_ingestion', 
+                    m_id, 
+                    continent, 
+                    False, 
+                    _job_id=f"ingest_{m_id}",
+                    _queue_name='default'
+                )
+                tasks_enqueued += 1
+            await redis_pool.aclose()
 
-        # 2. Identification de N-1 et N+1 (Localité spatiale)
-        try:
-            index = ordered_match_ids.index(match_id)
-            if index > 0:
-                targets_to_fetch.append(ordered_match_ids[index - 1]) # Match plus récent (N+1 visuel)
-            if index < len(ordered_match_ids) - 1:
-                targets_to_fetch.append(ordered_match_ids[index + 1]) # Match plus ancien (N-1 visuel)
-        except ValueError:
-            pass # Le match_id n'est pas dans la liste (cas rare)
+        return {
+            "status": "success",
+            "start_index": start_index,
+            "new_matches_found": len(new_match_ids),
+            "tasks_enqueued": tasks_enqueued
+        }
+    
+    async def trigger_timeline_prefetch(self, target_ids: List[str], server: str) -> Dict[str, Any]:
+        """
+        Déclenche l'ingestion asynchrone des timelines ciblées à la demande du frontend.
+        """
+        routing = self.client.get_routing(server)
+        continent = routing["continent"]
 
-        # 3. Vérifier quelles timelines manquent réellement en base
-        query_missing = select(MatchTimeline.match_id).where(MatchTimeline.match_id.in_(targets_to_fetch))
+        if not target_ids:
+             return {"status": "skipped", "reason": "Aucune cible fournie"}
+
+        query_missing = select(MatchTimeline.match_id).where(MatchTimeline.match_id.in_(target_ids))
         result_missing = await self.db.execute(query_missing)
         existing_timelines = set(result_missing.scalars().all())
 
-        missing_targets = [m_id for m_id in targets_to_fetch if m_id not in existing_timelines]
+        missing_targets = [m_id for m_id in target_ids if m_id not in existing_timelines]
 
-        # 4. Envoi au Worker
         tasks_enqueued = 0
         if missing_targets:
             redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
             
             for m_id in missing_targets:
-                # Le premier élément de missing_targets est le match_id cliqué (P0)
-                # arq permet de définir un _defer_by, mais ici l'ordre d'insertion dicte la priorité immédiate
-                await redis_pool.enqueue_job('process_timeline_only', m_id, continent)
+                # Routage CRITIQUE : ces requêtes initiées par l'action humaine vont 
+                # dans la file 'high_priority' pour être traitées instantanément.
+                await redis_pool.enqueue_job(
+                    'process_timeline_only', 
+                    m_id, 
+                    continent, 
+                    _job_id=f"timeline_{m_id}",
+                    _queue_name='high_priority'
+                )
                 tasks_enqueued += 1
                 
             await redis_pool.aclose()

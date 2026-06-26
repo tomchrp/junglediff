@@ -1,6 +1,19 @@
+/**
+ * ============================================================================
+ * FICHIER : frontend/src/components/sidebar/ChampionStatCard.jsx
+ * PROJET  : JungleDiff
+ *
+ * DESCRIPTION :
+ * Affiche les statistiques résumées d'un champion spécifique dans la Sidebar.
+ * Accepte désormais la version de DataDragon en paramètre (versionDDragon) 
+ * pour garantir que les images des champions nouvellement sortis s'affichent 
+ * correctement. Intègre une image de secours via onError.
+ * ============================================================================
+ */
+
 import React from 'react';
 
-const ChampionStatCard = ({ championName, gamesPlayed, wins, winrate, isSelected, onClick }) => {
+const ChampionStatCard = ({ championName, gamesPlayed, wins, winrate, isSelected, versionDDragon, onClick }) => {
     const winrateColor = winrate >= 50 ? 'text-green-500' : 'text-red-500';
 
     const cardStyle = isSelected
@@ -13,10 +26,10 @@ const ChampionStatCard = ({ championName, gamesPlayed, wins, winrate, isSelected
             className={`w-full text-left p-3 mb-2 flex items-center gap-4 rounded-sm border transition-all duration-200 cursor-pointer ${cardStyle}`}
         >
             <img
-                src={`https://ddragon.leagueoflegends.com/cdn/14.12.1/img/champion/${championName}.png`}
+                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon || '14.12.1'}/img/champion/${championName}.png`}
                 alt={championName}
                 className={`w-12 h-12 rounded-sm border ${isSelected ? 'border-lol-gold' : 'border-lol-border'}`}
-                onError={(e) => { e.target.src = 'https://ddragon.leagueoflegends.com/cdn/14.12.1/img/profileicon/29.png'; }}
+                onError={(e) => { e.target.src = `https://ddragon.leagueoflegends.com/cdn/${versionDDragon || '14.12.1'}/img/profileicon/29.png`; }}
             />
 
             <div className="flex-1 min-w-0">

@@ -5,16 +5,19 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Script d'orchestration global pour l'environnement de developpement sous Windows.
-Automatise le lancement de l'infrastructure Docker, du backend (FastAPI), 
-du worker asynchrone (ARQ), et desormais du frontend (Vite/React).
+Lance désormais DEUX workers ARQ en parallèle pour respecter le routage
+et la priorisation des files d'attente.
 ===============================================================================
 #>
 
 Write-Host "Demarrage de l'infrastructure Docker (PostgreSQL, Redis)..." -ForegroundColor Cyan
 docker-compose up -d
 
-Write-Host "Lancement du Worker ARQ..." -ForegroundColor Cyan
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; ..\venv\Scripts\Activate.ps1; `$env:PYTHONPATH='.'; arq app.worker.worker_settings.WorkerSettings"
+Write-Host "Lancement du Worker ARQ (Ingestion Massive - Default)..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; ..\venv\Scripts\Activate.ps1; `$env:PYTHONPATH='.'; arq app.worker.worker_settings.WorkerSettingsDefault"
+
+Write-Host "Lancement du Worker ARQ (Rapide - High Priority)..." -ForegroundColor Cyan
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; ..\venv\Scripts\Activate.ps1; `$env:PYTHONPATH='.'; arq app.worker.worker_settings.WorkerSettingsHigh"
 
 Write-Host "Lancement de l'API FastAPI..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; ..\venv\Scripts\Activate.ps1; uvicorn app.main:app --reload --port 8000"

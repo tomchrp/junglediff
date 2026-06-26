@@ -5,9 +5,11 @@
  *
  * DESCRIPTION :
  * Composant parent (Orchestrateur) pour l'affichage d'un match.
- * Gère la vue condensée (en-tête), l'état d'ouverture (isOpen), la navigation 
- * par onglets et intègre le système de Polling asynchrone pour l'ingestion 
- * de la Timeline à la volée.
+ * Intègre un système de Polling asynchrone intelligent et économe en quotas :
+ * 1. Délai de Grâce (400ms) : Annule la requête si la carte est refermée aussitôt.
+ * 2. Anticipation Spatiale Retardée (1500ms) : Pré-télécharge les matchs N-1 et 
+ * N+1 uniquement si l'utilisateur démontre un intérêt prolongé pour la carte.
+ * 3. Exponential Backoff : Protège le serveur en espaçant les requêtes de statut.
  * ============================================================================
  */
 
@@ -19,11 +21,10 @@ import MatchCardRoleJungle from './MatchCardRoleJungle.jsx';
 const SUMMONER_SPELLS = { 4: "SummonerFlash", 11: "SummonerSmite", 12: "SummonerTeleport", 14: "SummonerDot", 7: "SummonerHeal", 6: "SummonerHaste", 3: "SummonerExhaust", 21: "SummonerBarrier", 1: "SummonerBoost", 32: "SummonerSnowball" };
 const RUNE_PATHS = { 8000: "7201_Precision", 8100: "7200_Domination", 8200: "7202_Sorcery", 8300: "7203_Whimsy", 8400: "7204_Resolve" };
 
-const MatchCard = ({ match, playerPuuid, versionDDragon, championMap, currentServer, onPlayerSearch }) => {
+const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, championMap, currentServer, onPlayerSearch }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('resume');
 
-    // Nouveaux états pour le système de Polling de la Timeline
     const [isTimelineLoading, setIsTimelineLoading] = useState(false);
     const [fetchedTimeline, setFetchedTimeline] = useState(null);
 
@@ -47,61 +48,107 @@ const MatchCard = ({ match, playerPuuid, versionDDragon, championMap, currentSer
     const getChampionImageName = (champId) => championMap[champId] || "Inconnu";
     const currentUserChampImage = getChampionImageName(currentPlayer.championId);
 
-    // Détection de la présence de la timeline dans toutes les couches de données possibles
     const hasTimeline = match.timeline || match.raw_timeline_data || match.raw_data?.timeline || fetchedTimeline;
 
     /**
-     * Gère le cycle de vie du téléchargement asynchrone de la timeline.
-     * Se déclenche uniquement lorsque l'utilisateur ouvre l'accordéon (isOpen)
-     * et que la timeline est manquante. Effectue des appels API réguliers (Polling)
-     * jusqu'à ce que le backend confirme l'ingestion de la donnée.
+     * Gestion fine du cycle de vie réseau pour protéger les quotas de l'API Riot.
      */
     useEffect(() => {
-        let intervalId;
+        let pollingTimeoutId;
+        let graceTimeoutId;
+        let anticipationTimeoutId;
+        let currentDelay = 2000;
 
         const checkTimelineStatus = async () => {
+            if (!isOpen) return; // Sécurité supplémentaire
+
             try {
                 const matchId = match.metadata?.matchId || match.match_id;
-                // Appel vers le backend FastAPI (Triple appel ou simple vérification)
+                // Appel focalisé UNIQUEMENT sur la carte courante
                 const response = await fetch(`http://localhost:8000/api/v1/matches/${matchId}/timeline/status?puuid=${playerPuuid}&server=${currentServer}`);
 
                 if (response.ok) {
                     const result = await response.json();
 
                     if (result.status === 'ready') {
-                        // La donnée est prête en base, on l'injecte dans le composant
                         setFetchedTimeline(result.data);
                         setIsTimelineLoading(false);
-                        clearInterval(intervalId);
+                        return; // Fin de la boucle
                     } else if (result.status === 'loading') {
-                        // Le Worker ARQ travaille toujours, on maintient l'animation
-                        setIsTimelineLoading(true);
+                        currentDelay = Math.min(currentDelay * 1.5, 8000);
+                        pollingTimeoutId = setTimeout(checkTimelineStatus, currentDelay);
                     }
+                } else {
+                    currentDelay = Math.min(currentDelay * 1.5, 8000);
+                    pollingTimeoutId = setTimeout(checkTimelineStatus, currentDelay);
                 }
             } catch (error) {
                 console.error("Erreur de polling timeline:", error);
-                clearInterval(intervalId);
-                setIsTimelineLoading(false);
+                currentDelay = Math.min(currentDelay * 1.5, 8000);
+                pollingTimeoutId = setTimeout(checkTimelineStatus, currentDelay);
+            }
+        };
+
+        const triggerAnticipation = async () => {
+            if (!isOpen) return;
+
+            try {
+                const matchId = match.metadata?.matchId || match.match_id;
+                let prefetchIds = [];
+
+                if (matchList && matchList.length > 0) {
+                    const currentIndex = matchList.findIndex(m => (m.metadata?.matchId || m.match_id) === matchId);
+                    if (currentIndex > 0) {
+                        const prevMatch = matchList[currentIndex - 1];
+                        prefetchIds.push(prevMatch.metadata?.matchId || prevMatch.match_id);
+                    }
+                    if (currentIndex < matchList.length - 1) {
+                        const nextMatch = matchList[currentIndex + 1];
+                        prefetchIds.push(nextMatch.metadata?.matchId || nextMatch.match_id);
+                    }
+                }
+
+                if (prefetchIds.length > 0) {
+                    // Fire and forget silencieux en arrière-plan pour amorcer les workers ARQ
+                    fetch(`http://localhost:8000/api/v1/matches/${matchId}/timeline/status?puuid=${playerPuuid}&server=${currentServer}&prefetch_ids=${prefetchIds.join(',')}`).catch(() => { });
+                }
+            } catch (e) {
+                // On ignore silencieusement les erreurs d'anticipation pour ne pas polluer la console
             }
         };
 
         if (isOpen && !hasTimeline) {
+            // L'UI affiche immédiatement le chargement pour la réactivité, mais le réseau attend.
             setIsTimelineLoading(true);
-            checkTimelineStatus(); // Premier appel immédiat
-            intervalId = setInterval(checkTimelineStatus, 2000); // Boucle toutes les 2 secondes
+
+            // 1. Délai de Grâce : On attend 400ms avant de consommer un jeton API.
+            graceTimeoutId = setTimeout(() => {
+                checkTimelineStatus();
+            }, 400);
+
+            // 2. Anticipation : On attend 1.5s pour s'assurer que l'utilisateur lit vraiment la carte.
+            anticipationTimeoutId = setTimeout(() => {
+                triggerAnticipation();
+            }, 1500);
+
+        } else if (!isOpen) {
+            // Si la carte est refermée, on nettoie l'état de chargement
+            if (!hasTimeline) setIsTimelineLoading(false);
         }
 
+        // Nettoyage au démontage ou lors de la fermeture : annule toutes les requêtes en attente
         return () => {
-            if (intervalId) clearInterval(intervalId);
+            if (graceTimeoutId) clearTimeout(graceTimeoutId);
+            if (anticipationTimeoutId) clearTimeout(anticipationTimeoutId);
+            if (pollingTimeoutId) clearTimeout(pollingTimeoutId);
         };
-    }, [isOpen, hasTimeline, match, playerPuuid, currentServer]);
+    }, [isOpen, hasTimeline, match, matchList, playerPuuid, currentServer]);
 
     const handleCardClick = () => {
         if (!isOpen) setActiveTab('resume');
         setIsOpen(!isOpen);
     };
 
-    // Fusion de l'objet match initial avec la timeline fraîchement téléchargée
     const enrichedMatch = {
         ...match,
         timeline: fetchedTimeline || match.timeline || match.raw_timeline_data || match.raw_data?.timeline
@@ -181,7 +228,6 @@ const MatchCard = ({ match, playerPuuid, versionDDragon, championMap, currentSer
                     )}
 
                     {activeTab === 'role' && currentPlayer.teamPosition === 'JUNGLE' && (
-                        // Injection du prop isTimelineLoading dans le sous-composant
                         <MatchCardRoleJungle match={enrichedMatch} currentPlayer={currentPlayer} opponent={opponent} isTimelineLoading={isTimelineLoading} />
                     )}
 

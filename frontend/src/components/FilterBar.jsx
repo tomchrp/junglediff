@@ -1,23 +1,32 @@
-/**
- * ============================================================================
- * FICHIER : frontend/src/components/FilterBar.jsx
- * PROJET  : JungleDiff
- *
- * DESCRIPTION :
- * Composant correspondant au bloc "Bleu fonce" de la maquette.
- * Contient les selecteurs de Patch et de Lane pour filtrer dynamiquement
- * les statistiques de la Sidebar et les parties de l'Historique.
- * ============================================================================
- */
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-import React from 'react';
+const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChange, refreshTrigger }) => {
+    const [availablePatches, setAvailablePatches] = useState([]);
 
-const FilterBar = ({ currentLane, currentPatch, onLaneChange, onPatchChange }) => {
+    useEffect(() => {
+        if (!puuid) {
+            setAvailablePatches([]);
+            return;
+        }
+
+        const fetchPatches = async () => {
+            try {
+                const res = await axios.get(`http://localhost:8000/api/v1/matches/${puuid}/patches`);
+                setAvailablePatches(res.data.patches || []);
+            } catch (error) {
+                console.error("Erreur lors de la récupération des patchs :", error);
+            }
+        };
+
+        fetchPatches();
+        // L'ajout de refreshTrigger force le refetch à la fin de l'ingestion ARQ
+    }, [puuid, refreshTrigger]);
+
     return (
         <div className="bg-lol-blue border border-lol-border rounded-lg p-3 flex gap-4 items-center shadow-md">
             <span className="text-[#a0a0a0] text-sm font-semibold uppercase tracking-wider ml-2">Filtres :</span>
 
-            {/* Selecteur de Lane */}
             <select
                 value={currentLane}
                 onChange={(e) => onLaneChange(e.target.value)}
@@ -31,15 +40,15 @@ const FilterBar = ({ currentLane, currentPatch, onLaneChange, onPatchChange }) =
                 <option value="UTILITY">Support</option>
             </select>
 
-            {/* Selecteur de Patch */}
             <select
                 value={currentPatch}
                 onChange={(e) => onPatchChange(e.target.value)}
                 className="bg-lol-dark text-white px-3 py-1.5 outline-none border border-lol-border focus:border-lol-gold rounded cursor-pointer text-sm"
             >
                 <option value="ALL">Tous les Patchs</option>
-                <option value="16.12">Patch 16.12</option>
-                {/* On pourra dynamiser cette liste plus tard selon les parties en base */}
+                {availablePatches.map((patch) => (
+                    <option key={patch} value={patch}>Patch {patch}</option>
+                ))}
             </select>
         </div>
     );

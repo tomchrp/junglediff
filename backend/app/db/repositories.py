@@ -13,7 +13,7 @@ frontend React.
 
 from sqlalchemy import select, func, desc, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from app.db.models import Player, MatchParticipant, Match
 
@@ -31,12 +31,11 @@ class PlayerRepository:
         """
         Calcule les statistiques agrégées (Sidebar) pour un joueur.
         Filtre dynamiquement par lane ou patch si spécifié.
-        Trie par nombre de parties jouées, puis par winrate.
         """
         stmt = (
             select(
                 MatchParticipant.champion_id,
-                func.count(MatchParticipant.id).label("games_played"),
+                func.count(MatchParticipant.match_id).label("games_played"),
                 func.sum(cast(MatchParticipant.win, Integer)).label("wins")
             )
             .join(Match, MatchParticipant.match_id == Match.match_id)
@@ -76,9 +75,53 @@ class MatchRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_match_history_paginated(self, puuid: str, end_time: Optional[int] = None, limit: int = 10, lane: Optional[str] = None, champion_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    async def get_available_patches(self, puuid: str) -> List[str]:
+        """
+        Obligatoire pour éviter une erreur 500 sur la route /{puuid}/patches.
+        Extrait de manière dynamique la liste des patchs disponibles pour un joueur.
+        """
+        stmt = (
+            select(Match.game_version)
+            .join(MatchParticipant, Match.match_id == MatchParticipant.match_id)
+            .where(MatchParticipant.puuid == puuid)
+            .distinct()
+        )
+        result = await self.db.execute(stmt)
+        raw_versions = result.scalars().all()
+        
+        patches = set()
+        for version in raw_versions:
+            if version and version != "Unknown":
+                parts = version.split('.')
+                if len(parts) >= 2:
+                    patches.add(f"{parts[0]}.{parts[1]}")
+        
+        def sort_key(patch_str):
+            try:
+                major, minor = map(int, patch_str.split('.'))
+                return (major, minor)
+            except ValueError:
+                return (0, 0)
+        
+        return sorted(list(patches), key=sort_key, reverse=True)
+
+    async def get_match_history_paginated(
+        self, 
+        puuid: str, 
+        end_time: Optional[int] = None, 
+        limit: int = 10, 
+        lane: Optional[str] = None, 
+        champion_id: Optional[int] = None,
+        patch: Optional[str] = None
+    ) -> Tuple[List[Dict[str, Any]], bool]:
         """
         Récupère les blocs de match pour l'historique avec pagination temporelle.
+        Utilise l'astuce algorithmique du `limit + 1` pour déterminer si des parties 
+        plus anciennes existent encore en base locale sans exécuter de fonction COUNT()
+        très lourde en ressources.
+        
+        Retourne un tuple contenant la liste des matchs (max: limit) et un booléen
+        indiquant s'il reste des parties locales pour les filtres actifs.
         """
         stmt = (
             select(Match.raw_match_data)
@@ -86,19 +129,27 @@ class MatchRepository:
             .where(MatchParticipant.puuid == puuid)
         )
 
-        # Remplacement du Offset par le Voyage Temporel (Filtre par date de création)
         if end_time:
             stmt = stmt.where(Match.creation_timestamp < end_time)
 
         if lane and lane.upper() != "ALL":
             stmt = stmt.where(MatchParticipant.position == lane.upper())
+            
         if champion_id:
             stmt = stmt.where(MatchParticipant.champion_id == champion_id)
 
-        # On garde le tri descendant et la limite
-        stmt = stmt.order_by(desc(Match.creation_timestamp)).limit(limit)
+        if patch and patch.upper() != "ALL":
+            stmt = stmt.where(Match.game_version.like(f"{patch}%"))
+
+        # On demande 11 parties au lieu de 10 pour vérifier l'existence d'une page suivante
+        stmt = stmt.order_by(desc(Match.creation_timestamp)).limit(limit + 1)
 
         result = await self.db.execute(stmt)
         
         matches = [row[0] for row in result.all()]
-        return matches
+        
+        has_more = len(matches) > limit
+        if has_more:
+            matches = matches[:limit]
+            
+        return matches, has_more

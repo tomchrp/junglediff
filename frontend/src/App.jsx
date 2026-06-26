@@ -1,4 +1,17 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * ============================================================================
+ * FICHIER : frontend/src/App.jsx
+ * PROJET  : JungleDiff
+ *
+ * DESCRIPTION :
+ * Composant racine de l'application.
+ * Gère le Polling Progressif et le Soft Reset des filtres.
+ * Intègre la protection contre les Race Conditions (AbortController) et le 
+ * Background Fetching pour éliminer le clignotement (Flickering) de l'interface.
+ * ============================================================================
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import SearchBar from './components/SearchBar.jsx';
 import PlayerStatCard from './components/sidebar/PlayerStatCard.jsx';
@@ -8,7 +21,7 @@ import MatchList from './components/history/MatchList.jsx';
 
 function App() {
   const [currentPuuid, setCurrentPuuid] = useState(null);
-  const [currentServer, setCurrentServer] = useState('EUW'); // Serveur mémorisé
+  const [currentServer, setCurrentServer] = useState('EUW');
   const [playerSummary, setPlayerSummary] = useState(null);
 
   const [laneFilter, setLaneFilter] = useState('ALL');
@@ -22,6 +35,12 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  const [isPollingBackground, setIsPollingBackground] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const lastIngestedCount = useRef(0);
 
   useEffect(() => {
     const initDataDragon = async () => {
@@ -44,7 +63,12 @@ function App() {
     setIsSyncing(true);
     setErrorMsg(null);
     setPlayerSummary(null);
-    setCurrentServer(server); // On garde en mémoire pour la redirection de clic
+    setCurrentServer(server);
+
+    setLaneFilter('ALL');
+    setPatchFilter('ALL');
+    setSelectedChampion(null);
+    lastIngestedCount.current = 0;
 
     try {
       const updateRes = await axios.post('http://localhost:8000/api/v1/players/update', {
@@ -55,6 +79,10 @@ function App() {
 
       const summaryRes = await axios.get(`http://localhost:8000/api/v1/players/${puuid}/summary`);
       setPlayerSummary(summaryRes.data);
+
+      setIsPollingBackground(true);
+      setIsInitialLoading(true);
+
     } catch (error) {
       setErrorMsg(error.response?.data?.detail || "Erreur de connexion au serveur.");
     } finally {
@@ -63,15 +91,55 @@ function App() {
   };
 
   useEffect(() => {
+    if (!currentPuuid || !isPollingBackground) return;
+    let pollInterval;
+
+    const checkStatus = async () => {
+      try {
+        const res = await axios.get(`http://localhost:8000/api/v1/players/${currentPuuid}/sync-status`);
+        const { status, matches_ingested } = res.data;
+
+        if (matches_ingested >= 5 || status === "completed") {
+          setIsInitialLoading(false);
+        }
+
+        if (matches_ingested > lastIngestedCount.current) {
+          lastIngestedCount.current = matches_ingested;
+          setRefreshTrigger(prev => prev + 1);
+        }
+
+        if (status === "completed") {
+          setIsPollingBackground(false);
+        }
+      } catch (err) {
+        console.warn("Attente du statut ARQ...");
+      }
+    };
+
+    checkStatus();
+    pollInterval = setInterval(checkStatus, 3000);
+    return () => clearInterval(pollInterval);
+  }, [currentPuuid, isPollingBackground]);
+
+  /**
+   * Récupération des statistiques avec protection Race Condition.
+   * L'AbortController tue les requêtes obsolètes si l'utilisateur change de filtre rapidement.
+   */
+  useEffect(() => {
     if (!currentPuuid) return;
+
+    const abortController = new AbortController();
+
     const fetchStats = async () => {
-      setIsLoadingStats(true);
+      // Background Fetching : on n'affiche le chargement que si la liste est complètement vide
+      if (championStats.length === 0) setIsLoadingStats(true);
+
       try {
         let url = `http://localhost:8000/api/v1/players/${currentPuuid}/champion-stats?`;
         if (laneFilter !== 'ALL') url += `lane=${laneFilter}&`;
         if (patchFilter !== 'ALL') url += `patch=${patchFilter}`;
 
-        const statsRes = await axios.get(url);
+        const statsRes = await axios.get(url, { signal: abortController.signal });
         let newStats = statsRes.data.championStats;
 
         newStats.sort((a, b) => {
@@ -82,41 +150,44 @@ function App() {
 
         setChampionStats(newStats);
 
-        if (newStats.length > 0) {
-          if (!newStats.some(stat => stat.championId === selectedChampion)) {
-            setSelectedChampion(newStats[0].championId);
-          }
-        } else setSelectedChampion(null);
-      } catch (error) { console.error("Erreur stats:", error); }
-      finally { setIsLoadingStats(false); }
+        if (selectedChampion && !newStats.some(stat => stat.championId === selectedChampion)) {
+          setSelectedChampion(null);
+        }
+
+      } catch (error) {
+        if (!axios.isCancel(error)) console.error("Erreur stats:", error);
+      } finally {
+        setIsLoadingStats(false);
+      }
     };
+
     fetchStats();
-  }, [currentPuuid, laneFilter, patchFilter, championMap]);
+
+    // Cleanup function : annule la requête si l'effet est relancé (changement de filtre)
+    return () => {
+      abortController.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPuuid, laneFilter, patchFilter, championMap, refreshTrigger, selectedChampion]);
 
   useEffect(() => {
-    // Si on vient de charger un joueur depuis la base de données...
     if (playerSummary && !isSyncing) {
       const now = Date.now();
       const diff = now - playerSummary.lastUpdate;
 
-      // Si la date de mise à jour date de plus de 120 secondes (2 minutes)
       if (diff > 120 * 1000) {
-        console.log("Les données profil ont plus de 2 minutes, auto-update silencieux déclenché.");
-        // On fait une requête POST sans vider les states (ce qui évite que l'interface clignote)
         axios.post('http://localhost:8000/api/v1/players/update', {
           server: currentServer,
           game_name: playerSummary.riotIdGameName,
           tag_line: playerSummary.riotIdTagline
         }).then(() => {
-          console.log("Auto-update silencieux terminé. Le worker ARQ traite l'historique.");
-          // Le composant MatchList devra être averti pour refaire un fetch.
+          setIsPollingBackground(true);
         }).catch(err => console.error("Échec auto-update:", err));
       }
     }
-  }, [playerSummary]);
-  
+  }, [playerSummary, currentServer, isSyncing]);
+
   return (
-    // FIX LAYOUT : h-screen et overflow-hidden bloquent la page globale
     <div className="h-screen bg-lol-dark p-6 overflow-hidden flex flex-col">
       <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1 min-h-0">
 
@@ -131,7 +202,6 @@ function App() {
         {currentPuuid && playerSummary && (
           <div className="flex gap-6 items-start flex-1 min-h-0">
 
-            {/* Colonne Gauche : Restreinte et scrollable indépendamment */}
             <div className="w-80 shrink-0 flex flex-col gap-6 h-full">
               <PlayerStatCard
                 summary={playerSummary}
@@ -159,6 +229,7 @@ function App() {
                           gamesPlayed={stat.gamesPlayed}
                           wins={stat.wins}
                           winrate={stat.winrate}
+                          versionDDragon={versionDDragon}
                           isSelected={selectedChampion === stat.championId}
                           onClick={() => setSelectedChampion(selectedChampion === stat.championId ? null : stat.championId)}
                         />
@@ -169,13 +240,18 @@ function App() {
               </div>
             </div>
 
-            {/* Colonne Droite : Layout vertical */}
             <div className="flex-1 flex flex-col gap-6 h-full min-w-0">
               <div className="shrink-0">
-                <FilterBar currentLane={laneFilter} currentPatch={patchFilter} onLaneChange={setLaneFilter} onPatchChange={setPatchFilter} />
+                <FilterBar
+                  puuid={currentPuuid}
+                  currentLane={laneFilter}
+                  currentPatch={patchFilter}
+                  onLaneChange={setLaneFilter}
+                  onPatchChange={setPatchFilter}
+                  refreshTrigger={refreshTrigger}
+                />
               </div>
 
-              {/* Conteneur Historique flexible et scrollable géré dans MatchList */}
               <MatchList
                 playerPuuid={currentPuuid}
                 laneFilter={laneFilter}
@@ -185,6 +261,8 @@ function App() {
                 championMap={championMap}
                 currentServer={currentServer}
                 onPlayerSearch={handleSearch}
+                isInitialLoading={isInitialLoading}
+                refreshTrigger={refreshTrigger}
               />
             </div>
           </div>

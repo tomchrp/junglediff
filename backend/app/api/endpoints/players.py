@@ -5,19 +5,23 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Routeur gérant les interactions liées aux joueurs. Expose la route d'ingestion 
-(update) et les routes de lecture (summary, champion-stats) nécessaires à la 
-construction de l'interface utilisateur.
+(update), les routes de lecture (summary, champion-stats), ainsi que la route 
+de polling (sync-status) qui a été modifiée pour renvoyer le nombre de parties 
+ingérées en temps réel.
 ===============================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from pydantic import BaseModel, Field
 from typing import Optional
+import time
 
 from app.db.session import get_db
 from app.services.sync_service import SyncService
 from app.db.repositories import PlayerRepository
+from app.db.models import Player, MatchParticipant
 
 router = APIRouter()
 
@@ -28,7 +32,11 @@ class PlayerSyncRequest(BaseModel):
 
 @router.post("/update")
 async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = Depends(get_db)):
-    """Route d'ingestion différentielle (Landing)."""
+    """
+    Route d'ingestion initiale. Déclenche le service de synchronisation qui 
+    récupère le profil Riot, vérifie le Data Lake local, et place les nouvelles 
+    parties en file d'attente ARQ.
+    """
     service = SyncService(db)
     result = await service.sync_player_profile(request.server, request.game_name, request.tag_line)
     
@@ -40,7 +48,7 @@ async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = D
 @router.get("/{puuid}/summary")
 async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
     """
-    Renvoie les informations globales du joueur pour la PlayerStatCard (Magenta).
+    Renvoie les informations globales du joueur pour la PlayerStatCard.
     """
     repo = PlayerRepository(db)
     player = await repo.get_player_by_puuid(puuid)
@@ -63,14 +71,46 @@ async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
 @router.get("/{puuid}/champion-stats")
 async def get_champion_stats(
     puuid: str, 
-    lane: Optional[str] = Query(None, description="Filtrer par rôle (ex: JUNGLE, TOP)"),
-    patch: Optional[str] = Query(None, description="Filtrer par patch (ex: 14.12)"),
+    lane: Optional[str] = Query(None, description="Filtrer par rôle"),
+    patch: Optional[str] = Query(None, description="Filtrer par patch"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Renvoie les statistiques agrégées des champions pour la Sidebar (Rouge/Vert).
-    La logique de calcul est déportée sur PostgreSQL.
+    Renvoie les statistiques agrégées des champions pour la Sidebar.
     """
     repo = PlayerRepository(db)
     stats = await repo.get_champion_stats_sidebar(puuid, lane, patch)
     return {"championStats": stats}
+
+@router.get("/{puuid}/sync-status")
+async def get_sync_status(puuid: str, db: AsyncSession = Depends(get_db)):
+    """
+    Détermine l'état de synchronisation d'un joueur en base de données de façon 
+    progressive.
+
+    La logique a été modifiée pour renvoyer systématiquement le nombre de parties 
+    actuellement ingérées. Le statut reste 'in_progress' jusqu'à ce que 60 secondes 
+    se soient écoulées ou que 60 parties aient été ingérées, permettant au frontend 
+    de rafraîchir l'interface progressivement.
+    """
+    query_player = select(Player).where(Player.puuid == puuid)
+    result_player = await db.execute(query_player)
+    player = result_player.scalar_one_or_none()
+    
+    if not player:
+        return {"status": "not_found"}
+
+    query_matches = select(func.count()).select_from(MatchParticipant).where(MatchParticipant.puuid == puuid)
+    result_matches = await db.execute(query_matches)
+    match_count = result_matches.scalar()
+
+    current_time = int(time.time() * 1000)
+    last_update = player.last_update_timestamp or 0
+    time_elapsed_ms = current_time - last_update
+
+    # Arrêt du polling si 60s sont passées (timeout sécurité) ou si 60 parties 
+    # (le plafond de notre triple appel) sont en base.
+    if time_elapsed_ms > 60000 or match_count >= 60:
+        return {"status": "completed", "matches_ingested": match_count}
+
+    return {"status": "in_progress", "matches_ingested": match_count}

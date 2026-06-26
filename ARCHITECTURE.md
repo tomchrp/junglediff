@@ -95,39 +95,57 @@ Les points de la roadmap technique initiale ont été résolus avec la mise en p
 
 L'interaction entre le Frontend (React) et le Backend a été blindée pour prévenir les timeouts et les attaques DDOS (volontaires ou non).
 
-* **Fire-and-Forget & Polling : L'interface ne subit plus de timeouts HTTP. Elle interroge une route de statut (/timeline/status) qui déclenche le téléchargement en arrière-plan et répond 202 Accepted. Le frontend boucle ensuite toutes les 2 secondes.
+* **Fire-and-Forget & Polling** : L'interface ne subit plus de timeouts HTTP. Elle interroge une route de statut (/timeline/status) qui déclenche le téléchargement en arrière-plan et répond 202 Accepted. Le frontend boucle ensuite toutes les 2 secondes.
 
-* **Skeleton Loader : Remplacement de l'interface par une structure "fantôme" pulsante (animate-pulse) pendant que la donnée est rapatriée.
+* **Skeleton Loader** : Remplacement de l'interface par une structure "fantôme" pulsante (animate-pulse) pendant que la donnée est rapatriée.
 
-* **Bouclier de Rafraîchissement (TTL) : Bouton manuel bridé par un verrou local de 120 secondes (localStorage). Rafraîchissement automatique silencieux en arrière-plan si la donnée affichée a plus de 2 minutes.
+* **Bouclier de Rafraîchissement (TTL)** : Bouton manuel bridé par un verrou local de 120 secondes (localStorage). Rafraîchissement automatique silencieux en arrière-plan si la donnée affichée a plus de 2 minutes.
 
 ### 5.2. L'Orchestration Temporelle et Spatiale (Worker ARQ)
 
 La charge de travail asynchrone a été scindée pour garantir une réactivité immédiate de l'interface.
 
-* **Tâches chirurgicales : Le téléchargement lourd de la Timeline a été détaché du téléchargement des MatchDetails.
-
-* **Prédiction par Localité Spatiale : L'ouverture d'une carte de match (N) déclenche instantanément le téléchargement de sa Timeline en priorité absolue (P0), et place les Timelines des matchs adjacents (N-1, N+1) en file d'attente secondaire (P1) pour anticiper le comportement de l'utilisateur.
+* **Tâches chirurgicales** : Le téléchargement lourd de la Timeline a été détaché du téléchargement des MatchDetails.
+* **Prédiction par Localité Spatiale** : L'ouverture d'une carte de match (N) déclenche instantanément le téléchargement de sa Timeline en priorité absolue (P0), et place les Timelines des matchs adjacents (N-1, N+1) en file d'attente secondaire (P1) pour anticiper le comportement de l'utilisateur.
 
 ### 5.3. Le Contrat de Données (Trimmer)
 Le service DataTrimmer a été implémenté pour filtrer les payloads massifs.
 
-* **Détails : Ne conserve que l'économie, la vision, le combat et le nœud challenges épuré.
+* **Détails** : Ne conserve que l'économie, la vision, le combat et le nœud challenges épuré.
 
-* **Timeline : Filtre strict appliqué sur les événements (CHAMPION_KILL, ELITE_MONSTER_KILL, achats, reventes et destructions d'items, évolutions de compétences, et destruction/pose de wards).
+* **Timeline** : Filtre strict appliqué sur les événements (CHAMPION_KILL, ELITE_MONSTER_KILL, achats, reventes et destructions d'items, évolutions de compétences, et destruction/pose de wards).
 
-### 5.4. UX Réactive et Boucliers Anti-Spam
-L'interaction entre le Frontend (React) et le Backend a été blindée pour prévenir les timeouts et les attaques DDOS (volontaires ou non).
-
-* **Fire-and-Forget & Polling : L'interface ne subit plus de timeouts HTTP. Elle interroge une route de statut (/timeline/status) qui déclenche le téléchargement en arrière-plan et répond 202 Accepted. Le frontend boucle ensuite toutes les 2 secondes.
-
-* **Skeleton Loader : Remplacement de l'interface par une structure "fantôme" pulsante (animate-pulse) pendant que la donnée est rapatriée.
-
-* **Bouclier de Rafraîchissement (TTL) : Bouton manuel bridé par un verrou local de 120 secondes (localStorage). Rafraîchissement automatique silencieux en arrière-plan si la donnée affichée a plus de 2 minutes.
-
-### 5.5. La Pagination Temporelle (endTime)
+### 5.4. La Pagination Temporelle (endTime)
 Le défilement infini (Lazy Loading) a abandonné la logique mathématique d'offset, inadaptée aux systèmes asynchrones.
 
-* **Le frontend lit le gameCreation de la dernière partie affichée et demande au backend les parties strictement antérieures à ce timestamp absolu.
+* Le frontend lit le gameCreation de la dernière partie affichée et demande au backend les parties strictement antérieures à ce timestamp absolu.
 
-* **Bénéfice : Élimine totalement le risque de doublons ou de matchs sautés (phénomène de décalage d'index) lorsque de nouvelles parties sont ingérées simultanément en arrière-plan.
+* Bénéfice : Élimine totalement le risque de doublons ou de matchs sautés lorsque de nouvelles parties sont ingérées simultanément en arrière-plan.
+
+# 6. Consolidation Architecturale (State Management & Résilience)
+La logique d'orchestration a été repensée pour garantir l'intégrité visuelle et la fluidité lors de l'ingestion de volumes massifs de données par les workers ARQ.
+
+### 6.1. Routage ARQ Isolé (Dual Workers) et Prévention des Deadlocks
+* **Files d'attente étanches** : Mise en place de deux workers ARQ tournant en parallèle sur des instances distinctes (default pour le téléchargement massif en arrière-plan, high_priority pour les requêtes UI initiées par le joueur).
+
+* **Résolution des accès concurrents** : Pour éviter les "Deadlocks" PostgreSQL lors des Bulk Upsert par plusieurs workers simultanés, le backend trie systématiquement la liste des joueurs par ordre alphabétique de puuid avant de requérir des verrous transactionnels.
+
+### 6.2. Polling Progressif et "Lifting State Up"
+* **Centralisation de l'état** : Le statut d'ingestion est remonté (Lifting State Up) dans le composant racine de l'application (App.jsx), propageant un refreshTrigger à tous les composants enfants pour une synchronisation parfaite (Patchs, Sidebar, Historique).
+
+* **Libération précoce** : L'écran de chargement global n'attend plus la fin des 60 téléchargements. Il se retire dès que 5 parties sont ingérées, permettant la navigation pendant que le processus se termine silencieusement en arrière-plan.
+
+### 6.3. Background Fetching et Protection Asynchrone
+* **Élimination du Flickering** : Les requêtes API ne déclenchent plus la destruction visuelle des composants (setIsLoading(true)) si des données sont déjà affichées à l'écran, écrasant les anciens tableaux en toute transparence.
+
+* **Race Conditions** : Intégration systématique d'un AbortController sur les requêtes filtrées pour détruire en vol les requêtes obsolètes si l'utilisateur change de filtre rapidement.
+
+### 6.4. Soft Reset UX et Scroll Anchoring
+* **Soft Reset (Filtres tolérants)** : Lors d'un changement de rôle (Lane), le champion sélectionné n'est conservé que s'il est logiquement présent dans le nouveau contexte. Dans le cas contraire, le filtre retombe gracieusement sur une vue globale au lieu de forcer arbitrairement une sélection.
+
+* **Scroll Anchoring (Limite Dynamique)** : Lors d'un rafraîchissement d'historique déclenché par l'arrivée de nouvelles parties ARQ, la pagination calcule une limite dynamique (Math.max(limit, matches.length)) pour mettre à jour le volume exact de cartes actuellement lues par l'utilisateur, empêchant l'interface de s'effondrer vers le haut.
+
+### 6.5. Deep Fetch Sémantique et Sécurisé
+* **Routage Sémantique** : Le backend calcule l'existence de données résiduelles via un offset rapide (limit + 1) sans exécuter de COUNT() lourd. Le frontend adapte le texte de son bouton de pagination ("Afficher les parties suivantes" vs "Rechercher dans les archives Riot").
+
+* **Verrou Asynchrone** : Lors d'un Deep Fetch, une promesse asynchrone stricte (await new Promise) gèle le comportement cliquable pendant 4 secondes pour empêcher l'épuisement du quota API Riot (Rate Limit).
