@@ -149,3 +149,43 @@ La logique d'orchestration a été repensée pour garantir l'intégrité visuell
 * **Routage Sémantique** : Le backend calcule l'existence de données résiduelles via un offset rapide (limit + 1) sans exécuter de COUNT() lourd. Le frontend adapte le texte de son bouton de pagination ("Afficher les parties suivantes" vs "Rechercher dans les archives Riot").
 
 * **Verrou Asynchrone** : Lors d'un Deep Fetch, une promesse asynchrone stricte (await new Promise) gèle le comportement cliquable pendant 4 secondes pour empêcher l'épuisement du quota API Riot (Rate Limit).
+
+# 7. Refonte Frontend, Modélisation Analytique et Design System
+La transition du POC vers une application de production a nécessité une restructuration majeure de l'interface, la standardisation des composants visuels et le déport de la charge analytique vers la base de données.
+
+### 7.1. Architecture Split-View et Composants Transverses
+* **Routage par État (Lifting State Up)** : Le layout principal (App.jsx) a été refondu pour accueillir plusieurs vues analytiques (Historique, Synergies) tout en conservant une ossature commune. Les composants transverses (SideBar, FilterBar, PlayerStatCard) demeurent persistants lors de la navigation.
+
+* **Auto-Déduction de Contexte (UX)** : Pour maintenir la rigueur statistique de la vue Synergies sans bloquer l'utilisateur avec un filtre global ("ALL"), l'application intercepte la navigation et force l'affichage sur la voie de prédilection (preferredLane) du joueur, calculée dynamiquement par le backend.
+
+* **Scroll Unifié et Grid Stretch** : Utilisation avancée de CSS Grid pour permettre l'étirement naturel des colonnes de données (LaneGrid) et le report du défilement (scroll) sur le conteneur parent, garantissant une lecture fluide de bout en bout.
+
+* **Sticky Headers** : Les séparateurs de patchs et de dates de l'historique utilisent l'ancrage natif CSS (position: sticky) pour préserver le contexte temporel lors du défilement sans recourir à une logique JavaScript coûteuse en performances.
+
+### 7.2. Moteur Analytique (Auto-Jointures SQL)
+* **Requêtes Croisées Hautes Performances** : La vue "Synergies & Matchups" repose sur un endpoint dédié effectuant des auto-jointures (Self-Join) directes sur la table MatchParticipant.
+
+* **Délégation au SGBD** : Le croisement des taux de victoires (winrates) en fonction de la présence d'alliés ou d'adversaires est intégralement calculé par PostgreSQL, évitant la saturation de la RAM côté serveur Python.
+
+* **Sous-requêtes Isolées** : Le calcul de la preferredLane s'effectue via une sous-requête limitant l'échantillon aux 60 dernières parties du joueur, offrant une photographie de ses habitudes récentes sans pollution par des historiques obsolètes.
+
+### 7.3. Sanctuarisation du Design System (100% Tailwind)
+Pour résoudre la dette technique et les conflits d'injection DOM, l'architecture hybride (Material-UI + Tailwind) a été totalement abandonnée au profit d'un environnement Tailwind exclusif et strictement paramétré.
+
+* **Design Tokens Sémantiques** : Remplacement des couleurs arbitraires par des variables métier strictes (bg-app, surface-elevated, lol-win, lol-loss, lol-gold) intégrées dans la configuration Tailwind.
+
+Typographie Mathématique** : Imposition de la propriété font-variant-numeric: tabular-nums sur tous les éléments textuels pour garantir l'alignement vertical rigoureux des statistiques (Winrates, compteurs de parties).
+
+* **Glassmorphism Épuré** : Création d'une couche @layer components dans index.css exposant des classes utilitaires maîtrisées (.glass-panel) définissant un flou et une opacité constants, éradiquant les effets de biseau (inset) pour maximiser la lisibilité des données denses.
+
+* **UI Kit Atomique** : Interdiction progressive de l'usage de classes Tailwind arbitraires dans les composants complexes au profit de primitives inflexibles (Dossier components/ui/ : Card, Avatar).
+
+### 7.4. Implémentation du Thème "Dark Data-Viz" et Composants UI Purs
+La dernière itération du frontend a éradiqué les vestiges du POC (couleurs opaques en dur, balises natives non stylisables) au profit d'un environnement visuel optimisé pour l'analyse de données.
+
+* **Contraste Absolu (Dark Data-Viz)** : Remplacement des fonds bleus par un fond quasi-noir (`bg-app` : `#050505`). Les surfaces s'appuient sur des nuances de gris neutre (`surface-solid`, `surface-elevated`) pour réduire le bruit visuel et faire ressortir la donnée sémantique (victoire en vert `lol-win`, défaite en rouge `lol-loss`).
+* **Remplacement des Composants Natifs** : Création d'une primitive `CustomSelect.jsx` (UI Kit) pour remplacer les balises `<select>` HTML natives de la barre de filtres, inadaptées au Glassmorphism.
+* **Gestion Avancée du Modèle de Boîte (Box Model)** :
+    * Modification de la structure de l'application pour permettre à la SideBar d'avoir une hauteur dynamique (`max-h-full`) tout en préservant le comportement de défilement interne de la liste des champions (`min-h-0`).
+    * Optimisation des en-têtes collants (Patch et Date) dans l'historique : utilisation d'une hauteur stricte (`h-10`) et d'un fond `bg-app/90 backdrop-blur-md` pour créer un panneau hermétique occultant parfaitement les cartes lors du défilement.
+* **Routage et Contexte (UX)** : Ajout d'une réinitialisation stricte des filtres (Lane et Patch à "ALL") lors de la navigation de retour vers la vue Historique, évitant l'enfermement de l'utilisateur dans un contexte analytique inadapté.

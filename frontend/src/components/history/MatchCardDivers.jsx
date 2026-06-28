@@ -8,6 +8,8 @@
  * Gère l'affichage des métriques secondaires non classifiées dans l'analyse 
  * de rôle principale. Effectue un appel réseau isolé vers Data Dragon pour 
  * récupérer les icônes de compétences spécifiques au champion joué.
+ * * DESIGN SYSTEM : Utilise les surfaces neutres (surface-solid, app) et le 
+ * jeton text-lol-info pour l'accentuation des données analytiques.
  * ============================================================================
  */
 
@@ -58,7 +60,7 @@ const MatchCardDivers = ({ currentPlayer, opponent, versionDDragon, championName
 
             {/* SECTION 1 : UTILISATION DES COMPÉTENCES */}
             <div>
-                <h4 className="text-lol-gold text-[10px] font-bold uppercase tracking-widest border-b border-lol-border pb-1 mb-3">
+                <h4 className="text-lol-gold text-xs font-bold uppercase tracking-wider mb-4">
                     Activité et Mécaniques (Sorts Lancés)
                 </h4>
 
@@ -72,50 +74,49 @@ const MatchCardDivers = ({ currentPlayer, opponent, versionDDragon, championName
 
                         return (
                             <div key={`spell-${index}`} className="relative flex flex-col items-center">
-                                <div className="w-12 h-12 bg-lol-dark border border-lol-border rounded-sm overflow-hidden shadow-md">
+                                {/* Encadrement aligné sur le Design System */}
+                                <div className="w-12 h-12 bg-surface-solid border border-border-strong rounded-md overflow-hidden shadow-sm">
                                     {iconUrl ? (
                                         <img src={iconUrl} alt={`Sort ${SPELL_LETTERS[index]}`} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-500 font-bold">
+                                        <div className="w-full h-full flex items-center justify-center text-lol-textMuted font-bold">
                                             {SPELL_LETTERS[index]}
                                         </div>
                                     )}
                                 </div>
-                                {/* Badge de compteur */}
-                                <div className="absolute -bottom-2 bg-black border border-lol-gold/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm z-10">
+                                {/* Badge de compteur sur fond noir absolu pour le contraste */}
+                                <div className="absolute -bottom-2 bg-app border border-lol-info text-gray-100 text-[10px] font-bold px-1.5 py-0.5 rounded-md z-10">
                                     {casts || 0}
                                 </div>
-                                <div className="mt-3 text-[#00ffff] text-[10px] font-bold">{SPELL_LETTERS[index]}</div>
                             </div>
                         );
                     })}
 
-                    <div className="w-[1px] h-10 bg-lol-border/50 mx-2"></div> {/* Séparateur vertical */}
+                    {/* Séparateur vertical aligné sur les nouvelles bordures */}
+                    <div className="w-[1px] h-10 bg-border-glass mx-2"></div>
 
                     {/* Les 2 Sorts d'Invocateur */}
                     {summoners.map((sum, index) => {
                         const spellName = SUMMONER_SPELLS[sum.id] || "SummonerFlash";
                         return (
                             <div key={`sum-${index}`} className="relative flex flex-col items-center">
-                                <div className="w-12 h-12 bg-lol-dark border border-lol-border rounded-sm overflow-hidden shadow-md">
+                                <div className="w-12 h-12 bg-surface-solid border border-border-strong rounded-md overflow-hidden shadow-sm">
                                     <img
                                         src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/spell/${spellName}.png`}
                                         alt={spellName}
                                         className="w-full h-full object-cover"
                                     />
                                 </div>
-                                {/* Badge de compteur */}
-                                <div className="absolute -bottom-2 bg-black border border-[#00ffff]/50 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-sm z-10">
+                                <div className="absolute -bottom-2 bg-app border border-lol-info text-gray-100 text-[10px] font-bold px-1.5 py-0.5 rounded-md z-10">
                                     {sum.casts || 0}
                                 </div>
-                                <div className="mt-3 text-[#00ffff]/70 text-[10px] uppercase">Sum {index + 1}</div>
                             </div>
                         );
                     })}
                 </div>
 
                 {isLoading && (
-                    <div className="text-gray-500 text-xs italic mt-2">Chargement des icônes...</div>
+                    <div className="text-lol-textMuted text-xs italic mt-4">Chargement des icônes...</div>
                 )}
             </div>
 

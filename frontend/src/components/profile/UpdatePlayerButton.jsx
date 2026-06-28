@@ -6,7 +6,9 @@
  * DESCRIPTION :
  * Bouton d'action avec verrouillage anti-DDOS.
  * Protège le quota de l'API Riot en bloquant les requêtes manuelles
- * pendant 120 secondes après chaque clic. L'état persiste via localStorage.
+ * pendant 120 secondes après chaque clic. 
+ * * DESIGN SYSTEM : Utilisation des jetons de surface neutre pour l'état 
+ * désactivé et lol-gold pour l'incitation à l'action.
  * ============================================================================
  */
 
@@ -31,8 +33,8 @@ const UpdatePlayerButton = ({ onUpdate, isSyncing, puuid }) => {
             }
         };
 
-        checkCooldown(); // Vérification initiale
-        const interval = setInterval(checkCooldown, 1000); // Boucle de compte à rebours
+        checkCooldown();
+        const interval = setInterval(checkCooldown, 1000);
 
         return () => clearInterval(interval);
     }, [puuid]);
@@ -40,7 +42,6 @@ const UpdatePlayerButton = ({ onUpdate, isSyncing, puuid }) => {
     const handleClick = () => {
         if (cooldown > 0 || isSyncing) return;
 
-        // Verrouille l'action pour les 120 prochaines secondes
         const lockUntil = Date.now() + 120 * 1000;
         localStorage.setItem(`update_lock_${puuid}`, lockUntil);
         setCooldown(120);
@@ -52,10 +53,11 @@ const UpdatePlayerButton = ({ onUpdate, isSyncing, puuid }) => {
         <button
             onClick={handleClick}
             disabled={cooldown > 0 || isSyncing}
-            className={`px-4 py-2 rounded font-bold text-xs uppercase tracking-wider transition-colors border
+            className={`px-4 py-2 rounded-md font-bold text-xs uppercase tracking-wider transition-all border
                 ${cooldown > 0 || isSyncing
-                    ? 'bg-gray-800 border-gray-600 text-gray-500 cursor-not-allowed'
-                    : 'bg-lol-blue border-lol-gold text-lol-gold hover:bg-lol-dark hover:text-white cursor-pointer shadow-[0_0_10px_rgba(200,170,110,0.15)]'}`}
+                    ? 'bg-surface-solid border-border-strong text-lol-textMuted cursor-not-allowed'
+                    : 'bg-surface-elevated border-lol-gold text-lol-gold hover:bg-lol-gold hover:text-app cursor-pointer shadow-glow-gold'
+                }`}
         >
             {isSyncing ? 'Mise à jour...' : cooldown > 0 ? `Patientez ${cooldown}s` : 'Mettre à jour'}
         </button>

@@ -5,10 +5,19 @@
  *
  * DESCRIPTION :
  * Affiche la liste paginée des matchs.
- * Intègre la différenciation sémantique du bouton de bas de page.
+ * Intègre la différenciation sémantique du bouton de bas de page et des
+ * en-têtes collants (Sticky Headers) pour maintenir le contexte temporel 
+ * et de version lors du défilement.
  * ANTI-DÉCALAGE : Calcule une limite dynamique lors des rafraîchissements 
  * en arrière-plan pour maintenir le volume de cartes affichées et empêcher 
  * la perte de la position de lecture (Scroll Anchoring).
+ * 
+ * CHANGEMENTS "DARK DATA-VIZ" :
+ * - Remplacement de l'overlay de chargement (bg-lol-bg/80) par bg-app/80.
+ * - L'état vide (Empty State) devient un .glass-panel propre sans bordures bleues.
+ * - Les séparateurs collants utilisent bg-app (Patch) et bg-surface-solid/95 (Date) 
+ *   pour une intégration parfaite au défilement.
+ * - Le bouton de chargement passe sur la primitive glass-panel-interactive.
  * ============================================================================
  */
 
@@ -34,9 +43,14 @@ const MatchList = ({
     const scrollRef = useRef(null);
 
     /**
-     * Exécute la requête HTTP. 
-     * Accepte désormais un paramètre overrideLimit pour préserver le volume
-     * de l'historique lors d'un rafraîchissement silencieux.
+     * Exécute la requête HTTP pour récupérer l'historique paginé depuis l'API locale.
+     * Construit dynamiquement l'URL en appliquant les filtres actifs (rôle, patch, champion) 
+     * et gère le curseur de pagination (endTime) pour accumuler les matchs sans perte.
+     * 
+     * @param {number|null} currentEndTime - Timestamp du dernier match chargé.
+     * @param {number} overrideLimit - Nombre de matchs à requérir (ajustable pour le Scroll Anchoring).
+     * @param {AbortSignal|null} signal - Signal pour annuler la requête en cas de démontage.
+     * @returns {Array} Liste des nouveaux matchs récupérés.
      */
     const fetchMatches = async (currentEndTime = endTime, overrideLimit = limit, signal = null) => {
         if (!playerPuuid) return [];
@@ -66,7 +80,7 @@ const MatchList = ({
     };
 
     /**
-     * 1. Réinitialisation explicite (SANS refreshTrigger).
+     * 1. Réinitialisation explicite lors d'un changement de filtre (SANS refreshTrigger).
      */
     useEffect(() => {
         setMatches([]);
@@ -80,16 +94,12 @@ const MatchList = ({
     }, [playerPuuid, laneFilter, patchFilter, selectedChampion]);
 
     /**
-     * 2. Déclenchement de la requête (Rafraîchissement & Filtres).
+     * 2. Déclenchement de la requête initiale ou suite à un rafraîchissement (Background ARQ).
      */
     useEffect(() => {
         if (!playerPuuid || isInitialLoading) return;
 
         const abortController = new AbortController();
-
-        // FIX : Calcul de la limite dynamique
-        // Si l'utilisateur a déjà chargé 30 parties, on rafraîchit 30 parties
-        // pour empêcher l'interface de s'effondrer brutalement vers le haut.
         const currentLimit = Math.max(limit, matches.length);
 
         fetchMatches(null, currentLimit, abortController.signal);
@@ -101,7 +111,10 @@ const MatchList = ({
     }, [playerPuuid, laneFilter, patchFilter, selectedChampion, refreshTrigger, isInitialLoading]);
 
     /**
-     * Routage sémantique du bouton de chargement.
+     * Gère la logique de pagination intelligente à deux niveaux.
+     * Interroge d'abord la base de données locale. Si les données locales sont épuisées,
+     * déclenche un deep-fetch asynchrone vers les serveurs de Riot Games pour 
+     * étendre l'historique du joueur, puis relance une requête locale.
      */
     const loadMoreMatches = async () => {
         if (matches.length === 0 || isLoading) return;
@@ -122,8 +135,6 @@ const MatchList = ({
                     setHasMoreRiot(false);
                 } else {
                     await new Promise(resolve => setTimeout(resolve, 4000));
-
-                    // On utilise le dernier match de l'état local actuel comme ancre
                     const lastMatch = matches[matches.length - 1];
                     const nextEndTime = lastMatch.info.gameCreation;
                     setEndTime(nextEndTime);
@@ -143,6 +154,14 @@ const MatchList = ({
         return date.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     };
 
+    /**
+     * Transforme la liste plate des matchs en une structure arborescente imbriquée.
+     * Les données sont d'abord groupées par version majeure de patch, puis 
+     * subdivisées par journée calendaire pour permettre l'affichage des 
+     * en-têtes collants contextuels.
+     * 
+     * @returns {Object} Dictionnaire structuré { "14.12": { "lundi 10 juin": [...] } }
+     */
     const getStructuredHistory = () => {
         const patchGroups = {};
         matches.forEach(match => {
@@ -162,48 +181,56 @@ const MatchList = ({
         <div ref={scrollRef} className="flex flex-col w-full flex-1 overflow-y-auto custom-scrollbar pr-2 min-h-0 relative">
 
             {isInitialLoading && (
-                <div className="absolute inset-0 z-10 bg-lol-bg/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                <div className="absolute inset-0 z-50 bg-app/80 backdrop-blur-sm flex flex-col items-center justify-center">
                     <div className="animate-pulse flex flex-col items-center">
                         <div className="w-12 h-12 border-4 border-lol-gold border-t-transparent rounded-full animate-spin mb-4"></div>
                         <p className="text-lol-gold font-bold tracking-widest uppercase text-sm">Ingestion des parties en cours...</p>
-                        <p className="text-gray-400 text-xs mt-2">Le worker ARQ synchronise votre profil</p>
+                        <p className="text-lol-textMuted text-xs mt-2">Le worker ARQ synchronise votre profil</p>
                     </div>
                 </div>
             )}
 
             {matches.length === 0 && !isLoading && !isInitialLoading && (
-                <div className="bg-lol-blue border border-lol-border rounded p-8 text-center text-gray-400 text-sm mt-4">
+                <div className="glass-panel p-8 text-center text-lol-textMuted text-sm mt-4">
                     Aucune partie ne correspond aux critères de filtrage sélectionnés dans notre base de données.
                 </div>
             )}
 
             {Object.keys(structuredData).map((patch) => (
-                <div key={patch} className="mb-6">
-                    <div className="flex items-center my-4">
-                        <div className="flex-1 border-t border-lol-border"></div>
-                        <span className="px-4 text-lol-gold text-xs font-bold tracking-widest uppercase bg-lol-dark">
+                <div key={patch}>
+                    {/* Séparateur de Patch : Hauteur stricte (h-10) et suppression du margin-bottom */}
+                    <div className="sticky top-0 z-20 h-10 bg-app/90 backdrop-blur-md flex items-center">
+                        <div className="flex-1 border-t border-border-strong"></div>
+                        <span className="px-4 text-lol-gold text-xs font-bold tracking-widest uppercase">
                             PATCH {patch}
                         </span>
-                        <div className="flex-1 border-t border-lol-border"></div>
+                        <div className="flex-1 border-t border-border-strong"></div>
                     </div>
 
                     {Object.keys(structuredData[patch]).map((dateLabel) => (
-                        <div key={dateLabel} className="mb-4">
-                            <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2 pl-1">
-                                {dateLabel}
+                        <div key={dateLabel}>
+                            {/* Séparateur de Date : S'emboîte exactement sous le patch (top-10 = 40px) */}
+                            <div className="sticky top-10 z-10 bg-app/90 backdrop-blur-md py-2 mb-3 flex items-center">
+                                <span className="text-lol-textMuted text-xs font-bold uppercase tracking-wider pr-4">
+                                    {dateLabel}
+                                </span>
+                                <div className="flex-1 border-t border-border-glass"></div>
                             </div>
-                            {structuredData[patch][dateLabel].map(match => (
-                                <MatchCard
-                                    key={match.info.gameId}
-                                    match={match}
-                                    matchList={matches}
-                                    playerPuuid={playerPuuid}
-                                    versionDDragon={versionDDragon}
-                                    championMap={championMap}
-                                    currentServer={currentServer}
-                                    onPlayerSearch={onPlayerSearch}
-                                />
-                            ))}
+
+                            <div className="mb-4">
+                                {structuredData[patch][dateLabel].map(match => (
+                                    <MatchCard
+                                        key={match.info.gameId}
+                                        match={match}
+                                        matchList={matches}
+                                        playerPuuid={playerPuuid}
+                                        versionDDragon={versionDDragon}
+                                        championMap={championMap}
+                                        currentServer={currentServer}
+                                        onPlayerSearch={onPlayerSearch}
+                                    />
+                                ))}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -213,7 +240,7 @@ const MatchList = ({
                 <button
                     onClick={loadMoreMatches}
                     disabled={isLoading}
-                    className="my-4 bg-lol-blue border border-lol-border text-lol-gold font-bold py-2.5 rounded hover:bg-lol-dark transition-colors disabled:opacity-50 text-sm cursor-pointer"
+                    className="my-4 glass-panel-interactive text-lol-gold font-bold py-2.5 w-full text-center disabled:opacity-50 text-sm cursor-pointer"
                 >
                     {isLoading
                         ? 'Interrogation des bases de données...'

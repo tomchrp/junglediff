@@ -5,37 +5,35 @@
  *
  * DESCRIPTION :
  * Composant racine de l'application.
- * Gère le Polling Progressif et le Soft Reset des filtres.
- * Intègre la protection contre les Race Conditions (AbortController) et le 
- * Background Fetching pour éliminer le clignotement (Flickering) de l'interface.
+ * Gère le routage par état entre les différentes vues analytiques (Historique, 
+ * Synergies) et orchestre le cycle de vie des données.
  * ============================================================================
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import SearchBar from './components/SearchBar.jsx';
+import ViewSelector from './components/ViewSelector.jsx';
 import PlayerStatCard from './components/sidebar/PlayerStatCard.jsx';
 import ChampionStatCard from './components/sidebar/ChampionStatCard.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import MatchList from './components/history/MatchList.jsx';
+import SynergiesMatchupsWrapper from './components/synergies/SynergiesMatchupsWrapper.jsx';
 
 function App() {
   const [currentPuuid, setCurrentPuuid] = useState(null);
   const [currentServer, setCurrentServer] = useState('EUW');
   const [playerSummary, setPlayerSummary] = useState(null);
-
+  const [currentMainView, setCurrentMainView] = useState('HISTORIQUE');
   const [laneFilter, setLaneFilter] = useState('ALL');
   const [patchFilter, setPatchFilter] = useState('ALL');
-
   const [championStats, setChampionStats] = useState([]);
   const [selectedChampion, setSelectedChampion] = useState(null);
   const [championMap, setChampionMap] = useState({});
   const [versionDDragon, setVersionDDragon] = useState('14.12.1');
-
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-
   const [isPollingBackground, setIsPollingBackground] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -54,7 +52,9 @@ function App() {
         const map = {};
         for (const key in champData) { map[champData[key].key] = champData[key].id; }
         setChampionMap(map);
-      } catch (error) { console.error("Erreur DataDragon:", error); }
+      } catch (error) {
+        console.error("Erreur DataDragon:", error);
+      }
     };
     initDataDragon();
   }, []);
@@ -64,7 +64,6 @@ function App() {
     setErrorMsg(null);
     setPlayerSummary(null);
     setCurrentServer(server);
-
     setLaneFilter('ALL');
     setPatchFilter('ALL');
     setSelectedChampion(null);
@@ -121,17 +120,12 @@ function App() {
     return () => clearInterval(pollInterval);
   }, [currentPuuid, isPollingBackground]);
 
-  /**
-   * Récupération des statistiques avec protection Race Condition.
-   * L'AbortController tue les requêtes obsolètes si l'utilisateur change de filtre rapidement.
-   */
   useEffect(() => {
     if (!currentPuuid) return;
 
     const abortController = new AbortController();
 
     const fetchStats = async () => {
-      // Background Fetching : on n'affiche le chargement que si la liste est complètement vide
       if (championStats.length === 0) setIsLoadingStats(true);
 
       try {
@@ -163,10 +157,7 @@ function App() {
 
     fetchStats();
 
-    // Cleanup function : annule la requête si l'effet est relancé (changement de filtre)
-    return () => {
-      abortController.abort();
-    };
+    return () => abortController.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPuuid, laneFilter, patchFilter, championMap, refreshTrigger, selectedChampion]);
 
@@ -187,38 +178,60 @@ function App() {
     }
   }, [playerSummary, currentServer, isSyncing]);
 
+  const handleViewChange = (newView) => {
+    if (newView === 'HISTORIQUE') {
+      // Réinitialisation des filtres lors du retour à l'historique
+      setLaneFilter('ALL');
+      setPatchFilter('ALL');
+    } else if (newView === 'SYNERGIES' && laneFilter === 'ALL') {
+      const defaultLane = playerSummary?.preferredLane || 'JUNGLE';
+      setLaneFilter(defaultLane);
+    }
+    setCurrentMainView(newView);
+  };
+
   return (
-    <div className="h-screen bg-lol-dark p-6 overflow-hidden flex flex-col">
+    <div className="h-screen p-6 overflow-hidden flex flex-col">
       <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1 min-h-0">
 
         <SearchBar onSearch={handleSearch} isSyncing={isSyncing} />
 
         {errorMsg && (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded shrink-0">
+          <div className="bg-surface-solid border border-lol-loss text-red-200 p-4 rounded-lg shrink-0">
             {errorMsg}
           </div>
         )}
 
         {currentPuuid && playerSummary && (
+          <ViewSelector
+            currentView={currentMainView}
+            onViewChange={handleViewChange}
+          />
+        )}
+
+        {currentPuuid && playerSummary && (
           <div className="flex gap-6 items-start flex-1 min-h-0">
 
-            <div className="w-80 shrink-0 flex flex-col gap-6 h-full">
+            {/* Sidebar : max-h-full au lieu de h-full permet à la barre de rétrécir si peu de contenu */}
+            <div className="w-80 shrink-0 flex flex-col gap-6 max-h-full">
               <PlayerStatCard
                 summary={playerSummary}
                 onUpdate={() => handleSearch(currentServer, playerSummary.riotIdGameName, playerSummary.riotIdTagline)}
                 isSyncing={isSyncing}
+                versionDDragon={versionDDragon}
               />
 
-              <div className="bg-lol-blue border border-lol-border rounded p-3 shadow-lg flex flex-col flex-1 min-h-0">
-                <h3 className="text-white font-semibold mb-3 text-sm uppercase tracking-wider text-center border-b border-lol-border pb-2 shrink-0">
+              {/* Conteneur des champions : suppression du flex-1 forcé, il respecte maintenant sa taille de contenu, tout en scrollant si nécessaire via min-h-0 */}
+              <div className="glass-panel p-3 flex flex-col min-h-0 overflow-hidden">
+                <h3 className="text-gray-100 font-bold mb-3 text-sm uppercase tracking-wider text-center border-b border-border-glass pb-2 shrink-0">
                   Champions Joués
                 </h3>
 
-                <div className="overflow-y-auto pr-1 custom-scrollbar flex-1">
+                <div className="overflow-y-auto pr-1 custom-scrollbar">
                   {isLoadingStats ? (
-                    <div className="text-center text-gray-400 py-4 text-sm">Chargement...</div>
+                    <div className="text-center text-lol-textMuted py-4 text-sm font-medium">Analyse en cours...</div>
                   ) : championStats.length === 0 ? (
-                    <div className="text-center text-gray-400 py-4 text-sm">Aucune donnée.</div>
+                    <div className="text-center text-lol-textMuted py-4 text-sm italic">Aucune donnée disponible.</div>
                   ) : (
                     championStats.map((stat) => {
                       const champName = championMap[stat.championId] || "Inconnu";
@@ -241,7 +254,7 @@ function App() {
             </div>
 
             <div className="flex-1 flex flex-col gap-6 h-full min-w-0">
-              <div className="shrink-0">
+              <div className="shrink-0 z-40">
                 <FilterBar
                   puuid={currentPuuid}
                   currentLane={laneFilter}
@@ -252,19 +265,31 @@ function App() {
                 />
               </div>
 
-              <MatchList
-                playerPuuid={currentPuuid}
-                laneFilter={laneFilter}
-                patchFilter={patchFilter}
-                selectedChampion={selectedChampion}
-                versionDDragon={versionDDragon}
-                championMap={championMap}
-                currentServer={currentServer}
-                onPlayerSearch={handleSearch}
-                isInitialLoading={isInitialLoading}
-                refreshTrigger={refreshTrigger}
-              />
+              {currentMainView === 'HISTORIQUE' ? (
+                <MatchList
+                  playerPuuid={currentPuuid}
+                  laneFilter={laneFilter}
+                  patchFilter={patchFilter}
+                  selectedChampion={selectedChampion}
+                  versionDDragon={versionDDragon}
+                  championMap={championMap}
+                  currentServer={currentServer}
+                  onPlayerSearch={handleSearch}
+                  isInitialLoading={isInitialLoading}
+                  refreshTrigger={refreshTrigger}
+                />
+              ) : (
+                <SynergiesMatchupsWrapper
+                  puuid={currentPuuid}
+                  laneFilter={laneFilter}
+                  patchFilter={patchFilter}
+                  versionDDragon={versionDDragon}
+                  championMap={championMap}
+                  selectedChampion={selectedChampion}
+                />
+              )}
             </div>
+
           </div>
         )}
       </div>

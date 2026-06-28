@@ -1,5 +1,17 @@
+/**
+ * ============================================================================
+ * FICHIER : frontend/src/components/FilterBar.jsx
+ * PROJET  : JungleDiff
+ *
+ * DESCRIPTION :
+ * Barre transversale de filtrage (Rôle et Patch).
+ * * DESIGN SYSTEM : Utilisation de la primitive CustomSelect pour remplacer
+ * les balises <select> natives et bénéficier du Glassmorphism.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import CustomSelect from './ui/CustomSelect.jsx';
 
 const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChange, refreshTrigger }) => {
     const [availablePatches, setAvailablePatches] = useState([]);
@@ -20,36 +32,38 @@ const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChan
         };
 
         fetchPatches();
-        // L'ajout de refreshTrigger force le refetch à la fin de l'ingestion ARQ
     }, [puuid, refreshTrigger]);
 
+    // Formatage des données pour le composant CustomSelect
+    const laneOptions = [
+        { value: 'ALL', label: 'Toutes les Lanes' },
+        { value: 'TOP', label: 'Toplane' },
+        { value: 'JUNGLE', label: 'Jungle' },
+        { value: 'MIDDLE', label: 'Midlane' },
+        { value: 'BOTTOM', label: 'ADC' },
+        { value: 'UTILITY', label: 'Support' }
+    ];
+
+    const patchOptions = [
+        { value: 'ALL', label: 'Tous les Patchs' },
+        ...availablePatches.map(patch => ({ value: patch, label: `Patch ${patch}` }))
+    ];
+
     return (
-        <div className="bg-lol-blue border border-lol-border rounded-lg p-3 flex gap-4 items-center shadow-md">
-            <span className="text-[#a0a0a0] text-sm font-semibold uppercase tracking-wider ml-2">Filtres :</span>
+        <div className="glass-panel p-3 flex gap-4 items-center z-40 relative">
+            <span className="text-lol-textMuted text-sm font-semibold uppercase tracking-wider ml-2">Filtres :</span>
 
-            <select
+            <CustomSelect
                 value={currentLane}
-                onChange={(e) => onLaneChange(e.target.value)}
-                className="bg-lol-dark text-white px-3 py-1.5 outline-none border border-lol-border focus:border-lol-gold rounded cursor-pointer text-sm"
-            >
-                <option value="ALL">Toutes les Lanes</option>
-                <option value="TOP">Top</option>
-                <option value="JUNGLE">Jungle</option>
-                <option value="MIDDLE">Mid</option>
-                <option value="BOTTOM">ADC</option>
-                <option value="UTILITY">Support</option>
-            </select>
+                options={laneOptions}
+                onChange={onLaneChange}
+            />
 
-            <select
+            <CustomSelect
                 value={currentPatch}
-                onChange={(e) => onPatchChange(e.target.value)}
-                className="bg-lol-dark text-white px-3 py-1.5 outline-none border border-lol-border focus:border-lol-gold rounded cursor-pointer text-sm"
-            >
-                <option value="ALL">Tous les Patchs</option>
-                {availablePatches.map((patch) => (
-                    <option key={patch} value={patch}>Patch {patch}</option>
-                ))}
-            </select>
+                options={patchOptions}
+                onChange={onPatchChange}
+            />
         </div>
     );
 };

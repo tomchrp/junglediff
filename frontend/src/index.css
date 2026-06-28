@@ -4,10 +4,7 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Point d'entree global des styles de l'application.
- * Importe les trois couches fondamentales de Tailwind (base, components, utilities).
- * Applique egalement la couleur de fond sombre par defaut sur l'ensemble du body
- * pour eviter les flashs blancs au chargement.
+ * Point d'entrée des styles de l'application.
  * ============================================================================
  */
 
@@ -17,26 +14,49 @@
 
 @layer base {
   body {
-    background-color: #010a13;
-    color: #ffffff;
+    @apply bg-app text-gray-200 antialiased;
+    /* Remplacement du halo bleu par un halo gris/blanc très faible (opacité 3%) */
+    background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.03) 0%, rgba(5, 5, 5, 1) 60%);
+    background-attachment: fixed;
+  }
+
+  /* FORCAGE DES NOMBRES TABULAIRES */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  button {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-/* Personnalisation de la Scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
+@layer components {
+  .glass-panel {
+    @apply bg-surface backdrop-blur-md border border-border-glass shadow-glass rounded-xl;
+  }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: #010a13;
-  border-radius: 4px;
-}
+  .glass-panel-interactive {
+    @apply glass-panel transition-all duration-200 ease-in-out hover:bg-surface-elevated hover:border-border-strong cursor-pointer;
+  }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #1e2328;
-  border-radius: 4px;
-}
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #c8aa6e;
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
 }
