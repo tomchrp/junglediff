@@ -19,6 +19,7 @@ import ChampionStatCard from './components/sidebar/ChampionStatCard.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import MatchList from './components/history/MatchList.jsx';
 import SynergiesMatchupsWrapper from './components/synergies/SynergiesMatchupsWrapper.jsx';
+import ChatView from './components/chat/ChatView.jsx';
 
 function App() {
   const [currentPuuid, setCurrentPuuid] = useState(null);
@@ -265,7 +266,7 @@ function App() {
                 />
               </div>
 
-              {currentMainView === 'HISTORIQUE' ? (
+              {currentMainView === 'HISTORIQUE' && (
                 <MatchList
                   playerPuuid={currentPuuid}
                   laneFilter={laneFilter}
@@ -278,7 +279,9 @@ function App() {
                   isInitialLoading={isInitialLoading}
                   refreshTrigger={refreshTrigger}
                 />
-              ) : (
+              )}
+
+              {currentMainView === 'SYNERGIES' && (
                 <SynergiesMatchupsWrapper
                   puuid={currentPuuid}
                   laneFilter={laneFilter}
@@ -286,6 +289,13 @@ function App() {
                   versionDDragon={versionDDragon}
                   championMap={championMap}
                   selectedChampion={selectedChampion}
+                />
+              )}
+
+              {currentMainView === 'ASSISTANT_IA' && (
+                <ChatView
+                  puuid={currentPuuid}
+                  matches={[]}
                 />
               )}
             </div>

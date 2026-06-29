@@ -10,9 +10,10 @@ matches, etc.) avant leur injection dans l'instance FastAPI.
 """
 
 from fastapi import APIRouter
-from app.api.endpoints import players, matches
+from app.api.endpoints import players, matches, chat
 
 api_router = APIRouter()
 
 api_router.include_router(players.router, prefix="/players", tags=["Players"])
 api_router.include_router(matches.router, prefix="/matches", tags=["Matches"])
+api_router.include_router(chat.router, prefix="/chat", tags=["Chat"])

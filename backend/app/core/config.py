@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # La clé est chargée ici au démarrage, mais le client HTTP devra
     # prioriser la vérification dans Redis pour le rechargement à chaud.
     RIOT_API_KEY: Optional[str] = None
+
+    # API LLM (Gemma)
+    GEMMA_API_KEY: str
     
     # Configuration Pydantic pour lire le fichier .env
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)

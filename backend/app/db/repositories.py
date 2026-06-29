@@ -153,3 +153,44 @@ class MatchRepository:
             matches = matches[:limit]
             
         return matches, has_more
+    
+    async def get_match_spell_casts(self, puuid: str, match_id: str) -> dict:
+        query = select(Match.raw_match_data).where(Match.match_id == match_id)
+        result = await self.db.execute(query)
+        raw_data = result.scalar_one_or_none()
+
+        if not raw_data:
+            return {"erreur": "La partie demandée est introuvable."}
+
+        participants = raw_data.get("info", {}).get("participants", [])
+        
+        # Dictionnaire de traduction des sorts Riot Games
+        SUMMONER_MAP = {
+            1: "Purge (Cleanse)", 3: "Fatigue (Exhaust)", 4: "Saut Éclair (Flash)",
+            6: "Fantôme (Ghost)", 7: "Soin (Heal)", 11: "Châtiment (Smite)",
+            12: "Téléportation", 14: "Embrasement (Ignite)", 21: "Barrière"
+        }
+        
+        for participant in participants:
+            if participant.get("puuid") == puuid:
+                s1_id = participant.get("summoner1Id")
+                s2_id = participant.get("summoner2Id")
+                
+                return {
+                    # Champs sémantiques ajoutés pour l'analyse IA
+                    "championJoue": participant.get("championName", "Inconnu"),
+                    "roleJoue": participant.get("teamPosition", "Inconnu"),
+                    "nom_sort_invocateur_1": SUMMONER_MAP.get(s1_id, f"Sort {s1_id}"),
+                    "nom_sort_invocateur_2": SUMMONER_MAP.get(s2_id, f"Sort {s2_id}"),
+                    
+                    # Champs bruts conservés pour l'hydratation du SpellWidget React
+                    "championId": participant.get("championId"),
+                    "spell1Casts": participant.get("spell1Casts", 0),
+                    "spell2Casts": participant.get("spell2Casts", 0),
+                    "spell3Casts": participant.get("spell3Casts", 0),
+                    "spell4Casts": participant.get("spell4Casts", 0),
+                    "summoner1Casts": participant.get("summoner1Casts", 0),
+                    "summoner2Casts": participant.get("summoner2Casts", 0)
+                }
+
+        return {"erreur": "Le joueur spécifié n'a pas été trouvé."}

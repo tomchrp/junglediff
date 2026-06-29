@@ -45,6 +45,23 @@ La Timeline représente 90% du poids d'une partie. La télécharger de manière 
 2.  **Vitesse 2 (Background) :** Un worker télécharge en arrière-plan et en basse priorité les timelines des parties identifiées comme "Jungle".
 3.  **Vitesse 3 (On-Demand) :** Si l'utilisateur demande la vue Clear avant la fin de la Vitesse 2, la tâche est repriorisée.
 
+### 2.6. Architecture LLM (Assistant Contextuel - POC)
+
+Afin d'intégrer un assistant conversationnel (Gemma 4) sans compromettre la stabilité de l'application ni provoquer d'hallucinations, l'approche de "Tool Calling" autonome a été écartée. Le système repose sur le motif **"Context Injection"** (RAG déterministe) couplé à un flux **Server-Sent Events (SSE)**.
+
+#### Le Cycle de la Donnée (Stateful SSE)
+Le flux de communication entre le frontend et le backend est asynchrone et séquentiel pour garantir une UI réactive :
+
+1. **Extraction et Enrichissement :** Le backend (via `MatchRepository`) extrait la donnée brute en base et l'enrichit sémantiquement (traduction des IDs de sorts d'invocateur en texte clair, nom du champion, rôle). Le LLM ne manipule jamais d'IDs bruts.
+2. **Anticipation Visuelle (Widget) :** Avant même d'interroger l'IA, FastAPI envoie immédiatement la donnée structurée au frontend sous forme d'événement SSE (`widget_data`). Le frontend React intercepte ce paquet et monte instantanément le composant visuel (`SpellWidget`).
+3. **Injection Stricte :** Le backend assemble un prompt strict encapsulé dans des balises XML (`<ROLE_ET_OBJECTIF>`, `<CONTEXTE_DONNEES>`, `<DIRECTIVES_DE_REDACTION>`). Les données extraites y sont injectées. L'appel est ensuite passé au client `google.genai` en désactivant toute réflexion interne pour minimiser la latence.
+4. **Streaming :** Les tokens générés par le LLM sont streamés en temps réel vers le frontend via des événements SSE distincts (`text_chunk`).
+
+#### Implémentation Frontend
+* **Routage Scalable :** Le composant racine `App.jsx` a été refactorisé. L'opérateur ternaire de navigation a été remplacé par des évaluations logiques courtes (`&&`), permettant l'empilement de nouvelles vues comme la `ChatView`.
+* **Consommateur SSE (`chatService.js`) :** Utilisation de l'API native `fetch` et `TextDecoder` pour lire le flux HTTP continu, implémentant un buffer manuel pour recomposer les paquets JSON potentiellement sectionnés par le réseau.
+* **Autonomie Contextuelle :** La `ChatView` s'hydrate de manière autonome en requêtant les 15 dernières parties du joueur ciblé. L'interface lie les données JSON complexes (Optional Chaining sur `match.info.participants`) pour sécuriser le sélecteur de contexte et éviter les crashs React.
+
 ---
 
 ## 3. Bilan des Implémentations Réalisées
