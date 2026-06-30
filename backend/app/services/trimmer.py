@@ -9,7 +9,8 @@ Agit comme un filtre entonnoir sur les payloads JSON massifs de l'API Riot Games
 pour imposer un contrat de données ultra-strict. L'objectif est de réduire 
 drastiquement le poids des données stockées en base (PostgreSQL) tout en 
 conservant une précision chirurgicale sur les métriques d'analyse macro, 
-de vision, de combat, et la chronologie (Timeline) de la partie.
+de vision, de combat (incluant les spécificités de rôle comme les boucliers 
+et le contrôle de foule), et la chronologie (Timeline) de la partie.
 ===============================================================================
 """
 
@@ -26,11 +27,12 @@ class DataTrimmer:
         1. Extrait les métadonnées globales du match (ID, version, durée).
         2. Agrège les objectifs globaux par équipe (Dénominateurs de l'analyse).
         3. Isole chaque participant et ne conserve que les clés racines vitales
-           (Économie, Score de vision direct, Dégâts, Monstres tués absolus).
+           (Économie, Score de vision direct, Dégâts, Soins/Boucliers, Monstres tués absolus).
         4. Filtre le nœud complexe "challenges" pour extraire les exploits 
-           situationnels (vols d'objectifs, ganks précoces, emprise spatiale).
+           situationnels.
            
-        Retourne un dictionnaire allégé optimisé pour l'affichage de la MatchCard.
+        Retourne un dictionnaire allégé optimisé pour l'affichage de la MatchCard
+        et l'analyse avancée des rôles.
         """
         if not raw_data or "info" not in raw_data:
             return {}
@@ -69,6 +71,7 @@ class DataTrimmer:
         for p in info.get("participants", []):
             trimmed_participant = {
                 "puuid": p.get("puuid"),
+                "participantId": p.get("participantId"),
                 "riotIdGameName": p.get("riotIdGameName"),
                 "riotIdTagline": p.get("riotIdTagline"),
                 "teamId": p.get("teamId"),
@@ -91,17 +94,24 @@ class DataTrimmer:
                 "totalAllyJungleMinionsKilled": p.get("totalAllyJungleMinionsKilled", 0),
                 "totalEnemyJungleMinionsKilled": p.get("totalEnemyJungleMinionsKilled", 0),
                 "damageDealtToObjectives": p.get("damageDealtToObjectives", 0),
-                "visionScore": p.get("visionScore", 0),
                 
-                # Racines manquantes (Vision, Combats, Objectifs)
+                # Utilitaire (Spécifique Enchanteurs)
+                "totalDamageShieldedOnTeammates": p.get("totalDamageShieldedOnTeammates", 0),
+                
+                # Vision (Racines)
+                "visionScore": p.get("visionScore", 0),
+                "wardsKilled": p.get("wardsKilled", 0),
+                "wardsPlaced": p.get("wardsPlaced", 0),
+                "visionWardsBoughtInGame": p.get("visionWardsBoughtInGame", 0),
+                "detectorWardsPlaced": p.get("detectorWardsPlaced", 0),
+                "stealthWardsPlaced": p.get("stealthWardsPlaced", 0),
+                
+                # Combats et Objectifs
                 "damageDealtToEpicMonsters": p.get("damageDealtToEpicMonsters", 0),
                 "dragonKills": p.get("dragonKills", 0),
                 "baronKills": p.get("baronKills", 0),
                 "timeCCingOthers": p.get("timeCCingOthers", 0),
                 "totalTimeCCDealt": p.get("totalTimeCCDealt", 0),
-                "visionWardsBoughtInGame": p.get("visionWardsBoughtInGame", 0),
-                "detectorWardsPlaced": p.get("detectorWardsPlaced", 0),
-                "stealthWardsPlaced": p.get("stealthWardsPlaced", 0),
 
                 # Compteurs d'utilisation des Sorts & Invocateurs
                 "spell1Casts": p.get("spell1Casts", 0),
@@ -133,19 +143,14 @@ class DataTrimmer:
             # 3. Nœud Challenges Exhaustif
             challenges = p.get("challenges", {})
             trimmed_participant["challenges"] = {
-                # Communs
                 "killParticipation": challenges.get("killParticipation"),
                 "teamDamagePercentage": challenges.get("teamDamagePercentage"),
-                
-                # C1: Farm & Économie
                 "jungleCsBefore10Minutes": challenges.get("jungleCsBefore10Minutes"),
                 "enemyJungleMonsterKills": challenges.get("enemyJungleMonsterKills"),
                 "moreEnemyJungleThanOpponent": challenges.get("moreEnemyJungleThanOpponent"),
                 "buffsStolen": challenges.get("buffsStolen"),
                 "maxLevelLeadLaneOpponent": challenges.get("maxLevelLeadLaneOpponent"),
                 "alliedJungleMonsterKills": challenges.get("alliedJungleMonsterKills"),
-                
-                # C2: Contrôle des Objectifs
                 "initialCrabCount": challenges.get("initialCrabCount"),
                 "scuttleCrabKills": challenges.get("scuttleCrabKills"),
                 "voidMonsterKill": challenges.get("voidMonsterKill"),
@@ -155,14 +160,10 @@ class DataTrimmer:
                 "earliestDragonTakedown": challenges.get("earliestDragonTakedown"),
                 "earliestBaron": challenges.get("earliestBaron"),
                 "teamElderDragonKills": challenges.get("teamElderDragonKills"),
-                
-                # C3: Pression & Combat
                 "killsOnLanersEarlyJungleAsJungler": challenges.get("killsOnLanersEarlyJungleAsJungler"),
                 "junglerKillsEarlyJungle": challenges.get("junglerKillsEarlyJungle"),
                 "takedownsBeforeJungleMinionSpawn": challenges.get("takedownsBeforeJungleMinionSpawn"),
                 "junglerTakedownsNearDamagedEpicMonster": challenges.get("junglerTakedownsNearDamagedEpicMonster"),
-                
-                # C4: Vision
                 "visionScoreAdvantageLaneOpponent": challenges.get("visionScoreAdvantageLaneOpponent"),
                 "visionScorePerMinute": challenges.get("visionScorePerMinute"),
                 "controlWardTimeCoverageInRiverOrEnemyHalf": challenges.get("controlWardTimeCoverageInRiverOrEnemyHalf"),
@@ -170,7 +171,6 @@ class DataTrimmer:
                 "wardTakedowns": challenges.get("wardTakedowns")
             }
 
-            # Nettoyage des valeurs 'None' pour ne pas stocker les clés inexistantes
             trimmed_participant["challenges"] = {k: v for k, v in trimmed_participant["challenges"].items() if v is not None}
             trimmed_data["info"]["participants"].append(trimmed_participant)
 
@@ -184,18 +184,16 @@ class DataTrimmer:
         Processus :
         1. Itère sur chaque minute (frame) du match.
         2. Extrait l'état à la minute T pour chaque joueur (Position, Golds actuels, 
-           Niveau, Minions tués).
+           Niveau, Minions tués, Temps de contrôle ennemi).
         3. Filtre les événements (events) survenus pendant cette minute en utilisant 
-           une liste blanche stricte (valid_event_types) pour ignorer le bruit 
-           (comme les dégâts pris par les sbires).
+           une liste blanche stricte et ne conserve que les attributs minimaux pour 
+           réduire l'empreinte mémoire.
            
-        Retourne un objet allégé, prêt pour la construction de frises chronologiques 
-        (items, sorts) et la fiabilisation des statistiques d'objectifs et de vision.
+        Retourne un objet allégé, prêt pour la construction de frises chronologiques.
         """
         if not raw_timeline or "info" not in raw_timeline:
             return {}
 
-        # Le dictionnaire strict d'ingestion (étendus aux items, sorts et vision)
         valid_event_types = {
             "CHAMPION_KILL", "ELITE_MONSTER_KILL", "BUILDING_KILL", "CHAMPION_SPECIAL_KILL",
             "ITEM_PURCHASED", "ITEM_UNDO", "ITEM_SOLD", "ITEM_DESTROYED",
@@ -217,12 +215,35 @@ class DataTrimmer:
                     "currentGold": p_data.get("currentGold"),
                     "level": p_data.get("level"),
                     "minionsKilled": p_data.get("minionsKilled"),
-                    "jungleMinionsKilled": p_data.get("jungleMinionsKilled")
+                    "jungleMinionsKilled": p_data.get("jungleMinionsKilled"),
+                    "timeEnemySpentControlled": p_data.get("timeEnemySpentControlled")
                 }
                 
             for event in frame.get("events", []):
-                if event.get("type") in valid_event_types:
-                    trimmed_frame["events"].append(event)
+                ev_type = event.get("type")
+                if ev_type in valid_event_types:
+                    # Extraction sélective pour alléger le JSON stocké
+                    light_event = {
+                        "type": ev_type,
+                        "timestamp": event.get("timestamp")
+                    }
+                    
+                    if ev_type in ["WARD_PLACED", "WARD_KILL"]:
+                        light_event["creatorId"] = event.get("creatorId")
+                        light_event["killerId"] = event.get("killerId")
+                        light_event["wardType"] = event.get("wardType")
+                        
+                    elif ev_type == "ELITE_MONSTER_KILL":
+                        light_event["killerId"] = event.get("killerId")
+                        light_event["monsterType"] = event.get("monsterType")
+                        light_event["monsterSubType"] = event.get("monsterSubType")
+                        light_event["position"] = event.get("position")
+                        
+                    elif ev_type == "ITEM_PURCHASED":
+                        light_event["participantId"] = event.get("participantId")
+                        light_event["itemId"] = event.get("itemId")
+                        
+                    trimmed_frame["events"].append(light_event)
                     
             trimmed_timeline["info"]["frames"].append(trimmed_frame)
 

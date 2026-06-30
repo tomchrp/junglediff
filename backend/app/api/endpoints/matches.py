@@ -17,8 +17,9 @@ from typing import Optional, List
 
 from app.db.session import get_db
 from app.db.repositories import MatchRepository
-from app.db.models import MatchTimeline
+from app.db.models import MatchTimeline, Match
 from app.services.sync_service import SyncService
+from app.services.support_analysis_service import SupportAnalysisService
 
 router = APIRouter()
 
@@ -134,3 +135,26 @@ async def fetch_older_player_matches(
         )
         
     return result
+
+@router.get("/{match_id}/analysis/support")
+async def get_support_analysis(match_id: str, puuid: str, db: AsyncSession = Depends(get_db)):
+    """
+    Point d'entrée pour l'empreinte complète du Support.
+    Vérifie l'état de la timeline et délègue le calcul au service analytique.
+    """
+    match = await db.get(Match, match_id)
+    if not match:
+        raise HTTPException(status_code=404, detail="Partie introuvable.")
+        
+    timeline = await db.get(MatchTimeline, match_id)
+    if not timeline:
+        return {"status": "loading", "message": "Timeline en cours d'acquisition."}
+        
+    # Appel de la nouvelle méthode globale
+    analysis = SupportAnalysisService.analyze(
+        match_data=match.raw_match_data,
+        timeline_data=timeline.raw_timeline_data,
+        player_puuid=puuid
+    )
+    
+    return {"status": "ready", "data": analysis}

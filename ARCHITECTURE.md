@@ -206,3 +206,24 @@ La dernière itération du frontend a éradiqué les vestiges du POC (couleurs o
     * Modification de la structure de l'application pour permettre à la SideBar d'avoir une hauteur dynamique (`max-h-full`) tout en préservant le comportement de défilement interne de la liste des champions (`min-h-0`).
     * Optimisation des en-têtes collants (Patch et Date) dans l'historique : utilisation d'une hauteur stricte (`h-10`) et d'un fond `bg-app/90 backdrop-blur-md` pour créer un panneau hermétique occultant parfaitement les cartes lors du défilement.
 * **Routage et Contexte (UX)** : Ajout d'une réinitialisation stricte des filtres (Lane et Patch à "ALL") lors de la navigation de retour vers la vue Historique, évitant l'enfermement de l'utilisateur dans un contexte analytique inadapté.
+
+## 8. Architecture d'Analyse par Rôle (POC Support)
+
+Afin de permettre une analyse fine de la performance selon la position jouée, une architecture modulaire a été mise en place. Elle suit le principe d'Inversion de Contrôle pour garantir la réutilisabilité des composants UI.
+
+### 8.1. L'Inversion de Contrôle (Frontend)
+L'affichage des analyses de rôle est structuré en trois couches étanches :
+* **Couche 1 - Orchestrateurs Métier (`MatchCardRoleSupport.jsx`) :** Composant "intelligent" qui interroge l'API, normalise les statistiques sur une échelle de 100, génère le narratif (Insights) et configure les onglets disponibles.
+* **Couche 2 - Hub Central Agnostique (`RoleAnalysisDashboard.jsx`) :** Coquille UI "stupide". Gère la disposition en triptyque (non encore finalisée), dessine le graphe Radar des performances, affiche les tags d'Insights et gère la navigation par pilules. Il ignore les règles métier.
+* **Couche 3 - Vues Expertes (`SupportVisionView.jsx`, `SupportCombatView.jsx`) :** Composants détaillés affichant les graphiques temporels et les cartes de statistiques absolues ou conditionnelles.
+
+### 8.2. Moteur Temporel Événementiel (Backend)
+Pour garantir la justesse des séries temporelles (ex: Évolution de la vision), le backend a abandonné l'agrégation "minute par minute".
+* **Précision :** Les événements de la timeline sont parsés en conservant leur timestamp exact en millisecondes. 
+
+### 8.3. Analyse de Combat par Archétype
+La sous-vue Combat du Support introduit le rendu conditionnel basé sur l'archétype du champion (via un dictionnaire statique `support_archetypes.json` côté client).
+* **Statistiques Agnostiques :** Participation aux kills (KP%), Morts.
+* **Statistiques Spécifiques :** Dégâts absorbés (Enchanteur), Temps de contrôle (Vanguard), Temps d'entrave (Catcher), Part des dégâts de l'équipe (Artilleur).
+* **Cartes Dynamiques :** Des indicateurs n'apparaissent que si une condition d'exploit ou d'alerte est remplie (ex: "Carry Caché" si le support inflige plus de dégâts que son ADC, ou "Ange Gardien" s'il a 0 kill et plus de 15 assists).
+
