@@ -5,29 +5,26 @@
  *
  * DESCRIPTION :
  * Composant parent (Orchestrateur) pour l'affichage détaillé d'un match.
- * Applique le Design System "Dark Data-Viz" : surfaces neutres (Glassmorphism),
- * typographie mathématique et indicateurs sémantiques stricts (Win/Loss).
- * * Il intègre un système de Polling asynchrone intelligent pour protéger 
- * les quotas de l'API Riot :
- * 1. Délai de Grâce (400ms) : Annule la requête si la carte est refermée aussitôt.
- * 2. Anticipation Spatiale Retardée (1500ms) : Pré-télécharge les matchs N-1 et 
- * N+1 uniquement si l'utilisateur démontre un intérêt prolongé pour la carte.
- * 3. Exponential Backoff : Espace progressivement les requêtes de statut.
+ * Applique le Design System "Dark Data-Viz".
+ * * MODIFICATIONS (Refacto Layered Architecture) :
+ * - Suppression de l'intégration directe des composants de rôles (Jungle/Support).
+ * - Intégration du `RoleAnalysisController` pour router dynamiquement les 
+ * données d'analyse peu importe le rôle joué, purgeant ce composant 
+ * de toute logique conditionnelle complexe.
  * ============================================================================
  */
 
 import React, { useState, useEffect } from 'react';
 import MatchCardSummary from './MatchCardSummary.jsx';
 import MatchCardDivers from './MatchCardDivers.jsx';
-import MatchCardRoleJungle from './MatchCardRoleJungle.jsx';
-import MatchCardRoleSupport from './support/MatchCardRoleSupport.jsx';
+// NOUVEL IMPORT UNIQUE POUR TOUS LES RÔLES
+import RoleAnalysisController from './roles/RoleAnalysisController.jsx';
 
 const SUMMONER_SPELLS = { 4: "SummonerFlash", 11: "SummonerSmite", 12: "SummonerTeleport", 14: "SummonerDot", 7: "SummonerHeal", 6: "SummonerHaste", 3: "SummonerExhaust", 21: "SummonerBarrier", 1: "SummonerBoost", 32: "SummonerSnowball" };
 const RUNE_PATHS = { 8000: "7201_Precision", 8100: "7200_Domination", 8200: "7202_Sorcery", 8300: "7203_Whimsy", 8400: "7204_Resolve" };
 
 /**
  * Composant principal affichant la carte d'un match.
- * @param {Object} props - Propriétés du composant.
  */
 const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, championMap, currentServer, onPlayerSearch }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -61,9 +58,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
 
     /**
      * Gère le cycle de vie réseau lié à la timeline du match.
-     * Implémente un délai de grâce pour éviter de saturer le serveur lors 
-     * d'ouvertures/fermetures accidentelles, ainsi qu'une logique d'anticipation
-     * pour charger silencieusement les timelines des matchs adjacents.
+     * Implémente un délai de grâce et l'anticipation spatiale.
      */
     useEffect(() => {
         let pollingTimeoutId;
@@ -71,10 +66,6 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
         let anticipationTimeoutId;
         let currentDelay = 2000;
 
-        /**
-         * Interroge le serveur de manière répétée avec un délai exponentiel (Exponential Backoff)
-         * jusqu'à ce que le worker ARQ ait terminé d'ingérer la timeline.
-         */
         const checkTimelineStatus = async () => {
             if (!isOpen) return;
 
@@ -104,10 +95,6 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
             }
         };
 
-        /**
-         * Déclenche une requête de pré-chargement pour les matchs encadrant (N-1, N+1) 
-         * le match actuellement consulté, afin de fluidifier la navigation future.
-         */
         const triggerAnticipation = async () => {
             if (!isOpen) return;
 
@@ -131,7 +118,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     fetch(`http://localhost:8000/api/v1/matches/${matchId}/timeline/status?puuid=${playerPuuid}&server=${currentServer}&prefetch_ids=${prefetchIds.join(',')}`).catch(() => { });
                 }
             } catch (e) {
-                // Ignoré silencieusement pour ne pas polluer la console de l'utilisateur
+                // Ignoré silencieusement pour ne pas polluer la console
             }
         };
 
@@ -150,28 +137,16 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
         };
     }, [isOpen, hasTimeline, match, matchList, playerPuuid, currentServer]);
 
-    /**
-     * Bascule l'état d'ouverture de la carte et réinitialise l'onglet 
-     * sélectionné sur le résumé par défaut.
-     */
     const handleCardClick = () => {
         if (!isOpen) setActiveTab('resume');
         setIsOpen(!isOpen);
-    };
-
-    const enrichedMatch = {
-        ...match,
-        timeline: fetchedTimeline || match.timeline || match.raw_timeline_data || match.raw_data?.timeline
     };
 
     const accentClass = isWin ? 'border-l-lol-win' : 'border-l-lol-loss';
 
     return (
         <div className={`mb-3 glass-panel-interactive border-l-4 overflow-hidden ${accentClass}`}>
-
-            {/* VUE CONDENSÉE */}
             <div onClick={handleCardClick} className="p-4 flex items-center w-full select-none cursor-pointer">
-
                 {/* Section Avatar & Champion */}
                 <div className="flex items-center gap-3 w-[160px] shrink-0 min-w-0 pr-2">
                     <img
@@ -248,15 +223,9 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                             Résumé
                         </button>
 
-                        {currentPlayer.teamPosition === 'JUNGLE' && (
-                            <button onClick={() => setActiveTab('role_jungle')} className={`text-xs font-bold uppercase tracking-wider transition-colors pb-1 ${activeTab === 'role_jungle' ? 'text-lol-info border-b-2 border-lol-info' : 'text-lol-textMuted hover:text-gray-200'}`}>
-                                Analyse Jungle
-                            </button>
-                        )}
-
-                        {currentPlayer.teamPosition === 'UTILITY' && (
-                            <button onClick={() => setActiveTab('role_support')} className={`text-xs font-bold uppercase tracking-wider transition-colors pb-1 ${activeTab === 'role_support' ? 'text-lol-info border-b-2 border-lol-info' : 'text-lol-textMuted hover:text-gray-200'}`}>
-                                Analyse Support
+                        {(currentPlayer.teamPosition === 'JUNGLE' || currentPlayer.teamPosition === 'UTILITY') && (
+                            <button onClick={() => setActiveTab('role_analysis')} className={`text-xs font-bold uppercase tracking-wider transition-colors pb-1 ${activeTab === 'role_analysis' ? 'text-lol-info border-b-2 border-lol-info' : 'text-lol-textMuted hover:text-gray-200'}`}>
+                                Analyse {currentPlayer.teamPosition}
                             </button>
                         )}
 
@@ -269,12 +238,14 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                         <MatchCardSummary team100={team100} team200={team200} playerPuuid={playerPuuid} versionDDragon={versionDDragon} championMap={championMap} currentServer={currentServer} onPlayerSearch={onPlayerSearch} />
                     )}
 
-                    {activeTab === 'role_jungle' && currentPlayer.teamPosition === 'JUNGLE' && (
-                        <MatchCardRoleJungle match={enrichedMatch} currentPlayer={currentPlayer} opponent={opponent} isTimelineLoading={isTimelineLoading} />
-                    )}
-
-                    {activeTab === 'role_support' && currentPlayer.teamPosition === 'UTILITY' && (
-                        <MatchCardRoleSupport match={enrichedMatch} currentPlayer={currentPlayer} opponent={opponent} isTimelineLoading={isTimelineLoading} />
+                    {/* APPEL UNIQUE AU CONTRÔLEUR DYNAMIQUE */}
+                    {activeTab === 'role_analysis' && (
+                        <RoleAnalysisController
+                            matchId={match.metadata?.matchId || match.match_id}
+                            puuid={playerPuuid}
+                            role={currentPlayer.teamPosition}
+                            isTimelineLoading={isTimelineLoading}
+                        />
                     )}
 
                     {activeTab === 'divers' && (

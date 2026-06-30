@@ -12,6 +12,7 @@ du Deep Fetch pour remonter l'historique Riot.
 """
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
@@ -19,7 +20,8 @@ from app.db.session import get_db
 from app.db.repositories import MatchRepository
 from app.db.models import MatchTimeline, Match
 from app.services.sync_service import SyncService
-from app.services.support_analysis_service import SupportAnalysisService
+from app.services.analysis.jungle_analyzer import JungleAnalyzer
+from app.services.analysis.support_analyzer import SupportAnalyzer
 
 router = APIRouter()
 
@@ -136,25 +138,53 @@ async def fetch_older_player_matches(
         
     return result
 
-@router.get("/{match_id}/analysis/support")
-async def get_support_analysis(match_id: str, puuid: str, db: AsyncSession = Depends(get_db)):
+@router.get("/{match_id}/analysis/{role}")
+async def get_role_analysis(match_id: str, role: str, puuid: str, db: AsyncSession = Depends(get_db)):
     """
-    Point d'entrée pour l'empreinte complète du Support.
-    Vérifie l'état de la timeline et délègue le calcul au service analytique.
+    Endpoint générique pour récupérer l'analyse de rôle.
+    Instancie le bon analyseur en fonction du rôle demandé.
+    Intègre désormais la récupération de la timeline pour les métriques temporelles.
     """
-    match = await db.get(Match, match_id)
-    if not match:
+    # 1. Récupération des données brutes en base (Match)
+    query_match = select(Match.raw_match_data).where(Match.match_id == match_id)
+    result_match = await db.execute(query_match)
+    raw_match_data = result_match.scalar_one_or_none()
+
+    if not raw_match_data:
         raise HTTPException(status_code=404, detail="Partie introuvable.")
-        
-    timeline = await db.get(MatchTimeline, match_id)
-    if not timeline:
-        return {"status": "loading", "message": "Timeline en cours d'acquisition."}
-        
-    # Appel de la nouvelle méthode globale
-    analysis = SupportAnalysisService.analyze(
-        match_data=match.raw_match_data,
-        timeline_data=timeline.raw_timeline_data,
-        player_puuid=puuid
-    )
+
+    # 2. Récupération de la timeline (Optionnelle mais critique pour la Vision)
+    query_timeline = select(MatchTimeline.raw_timeline_data).where(MatchTimeline.match_id == match_id)
+    result_timeline = await db.execute(query_timeline)
+    raw_timeline_data = result_timeline.scalar_one_or_none()
+
+    participants = raw_match_data.get("info", {}).get("participants", [])
+    target_participant = next((p for p in participants if p.get("puuid") == puuid), None)
     
-    return {"status": "ready", "data": analysis}
+    if not target_participant:
+        raise HTTPException(status_code=404, detail="Joueur introuvable dans cette partie.")
+
+    # Identification de l'adversaire (vis-à-vis)
+    opponent = next((
+        p for p in participants 
+        if p.get("teamPosition") == target_participant.get("teamPosition") 
+        and p.get("teamId") != target_participant.get("teamId")
+        and p.get("teamPosition") not in ["NONE", ""]
+    ), None)
+
+    # Factory simple : Sélection de l'analyseur
+    role_upper = role.upper()
+    if role_upper == "JUNGLE":
+        analyzer = JungleAnalyzer()
+    elif role_upper == "UTILITY":
+        analyzer = SupportAnalyzer()
+    else:
+        raise HTTPException(status_code=400, detail=f"L'analyse pour le rôle {role} n'est pas encore supportée.")
+
+    # Exécution de l'analyse avec la timeline
+    analysis_result = analyzer.analyze(target_participant, raw_match_data, raw_timeline_data, opponent)
+
+    return {
+        "status": "ready",
+        "data": analysis_result
+    }
