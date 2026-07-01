@@ -5,22 +5,33 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Analyseur métier dédié au rôle de Support. 
-Intègre désormais le moteur d'ingénierie de combat pour extraire la courbe de 
-dégâts depuis les participantFrames et synchroniser les achats d'objets clés.
+Transforme les données brutes (détails et timeline) en métriques avancées
+exploitables par le frontend.
+
+MODIFICATIONS RÉCENTES :
+- Correction du bug d'affichage en double des objets en fin de partie via la 
+  consommation destructive (pop) du dictionnaire temporel.
 ===============================================================================
 """
 
 import json
 import os
-from typing import Dict, Any
+import urllib.request
+from typing import Dict, Any, Set
 from app.services.analysis.base_analyzer import BaseRoleAnalyzer
 
 class SupportAnalyzer(BaseRoleAnalyzer):
+    
+    _ddragon_items: Set[int] = None
     
     def __init__(self):
         self.archetypes = self._load_archetypes()
 
     def _load_archetypes(self) -> Dict[str, str]:
+        """
+        Charge le dictionnaire des archétypes de champions depuis le disque.
+        Associe un ID de champion à sa sous-classe (ex: ARTILLERY, ENCHANTER).
+        """
         file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "core", "dictionaries", "archetypes.json")
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -28,10 +39,52 @@ class SupportAnalyzer(BaseRoleAnalyzer):
         except FileNotFoundError:
             return {}
 
+    @classmethod
+    def _get_valid_items(cls) -> Set[int]:
+        """
+        Récupère dynamiquement les objets depuis Data Dragon.
+        Filtre et ne conserve que les objets dits "Majeurs" (Légendaires/Mythiques 
+        qui coûtent cher, ou les Bottes T2) pour ne pas polluer les graphiques.
+        Met le résultat en cache dans la classe lors du premier appel.
+        """
+        if cls._ddragon_items is not None:
+            return cls._ddragon_items
+            
+        try:
+            req_versions = urllib.request.Request("https://ddragon.leagueoflegends.com/api/versions.json", headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req_versions) as response:
+                versions = json.loads(response.read().decode())
+                latest_version = versions[0]
+            
+            req_items = urllib.request.Request(f"https://ddragon.leagueoflegends.com/cdn/{latest_version}/data/fr_FR/item.json", headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req_items) as response:
+                items_data = json.loads(response.read().decode())['data']
+                
+            valid_items = set()
+            for item_id, item_info in items_data.items():
+                gold = item_info.get("gold", {}).get("total", 0)
+                tags = item_info.get("tags", [])
+                depth = item_info.get("depth", 1)
+                
+                is_expensive = gold >= 2000
+                is_tier2_boots = ("Boots" in tags) and (depth >= 2)
+                
+                if is_expensive or is_tier2_boots:
+                    valid_items.add(int(item_id))
+                    
+            cls._ddragon_items = valid_items
+            return cls._ddragon_items
+            
+        except Exception as e:
+            print(f"[ERREUR] Impossible de charger Data Dragon : {e}")
+            return set()
+
     def _process_combat_timeline(self, participant_id: int, timeline_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parcourt la timeline pour extraire l'évolution des dégâts totaux
         et les associe aux achats d'objets majeurs du joueur.
+        Utilise la méthode pop() pour éviter l'affectation multiple d'un objet
+        à plusieurs frames dans la même minute (notamment en fin de partie).
         """
         if not timeline_data or "info" not in timeline_data:
             return {"damage_graph": []}
@@ -41,19 +94,14 @@ class SupportAnalyzer(BaseRoleAnalyzer):
         for frame in frames:
             events.extend(frame.get("events", []))
             
-        # Liste blanche empirique des objets finis (Bottes T2 et Légendaires/Mythiques)
-        # pour éviter de polluer le graphe avec des potions ou des tomes d'amplification.
-        legendary_items = {
-            3151, 3285, 3152, 3157, 3020, 3116, 4645, 6655, 3089, 3135, 4647, 
-            4629, 3136, 6653, 3111, 3117, 3158, 3869, 3865, 3042, 3110, 3165, 3153, 3108
-        }
+        valid_legendary_items = self._get_valid_items()
         
-        # Groupement des objets achetés par minute d'apparition
         items_per_minute = {}
         for event in events:
             if event.get("type") == "ITEM_PURCHASED" and event.get("participantId") == participant_id:
                 item_id = event.get("itemId")
-                if item_id in legendary_items:
+                
+                if item_id in valid_legendary_items:
                     minute = int(event.get("timestamp", 0) // 60000)
                     if minute not in items_per_minute:
                         items_per_minute[minute] = []
@@ -68,15 +116,22 @@ class SupportAnalyzer(BaseRoleAnalyzer):
             p_data = p_frames.get(str(participant_id), {})
             damage = p_data.get("damageStats", {}).get("totalDamageDoneToChampions", 0)
             
+            # Utilisation de pop() au lieu de get() pour consommer la donnée et éviter les doublons
+            item_ids = items_per_minute.pop(minute, [])
+            
             damage_graph.append({
                 "timestamp": ts,
                 "totalDamage": damage,
-                "itemIds": items_per_minute.get(minute, [])
+                "itemIds": item_ids
             })
             
         return {"damage_graph": damage_graph}
 
     def _process_vision_timeline(self, participant_id: int, opp_id: int, timeline_data: Dict[str, Any], game_duration: int) -> Dict[str, Any]:
+        """
+        Extrait les événements liés à la vision (balises posées, détruites) et 
+        calcule la préparation de la vision autour des monstres épiques.
+        """
         events = []
         if timeline_data and "info" in timeline_data:
             for frame in timeline_data["info"].get("frames", []):
@@ -158,6 +213,10 @@ class SupportAnalyzer(BaseRoleAnalyzer):
         }
 
     def analyze(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Point d'entrée de l'analyseur. Calcule les métriques globales, hydrate 
+        la vue Vision, et route dynamiquement les métriques de Combat selon l'archétype.
+        """
         c = participant.get("challenges", {})
         o_c = opponent.get("challenges", {}) if opponent else {}
         champion_id = str(participant.get("championId"))
@@ -180,8 +239,7 @@ class SupportAnalyzer(BaseRoleAnalyzer):
         opp_id = opponent.get("participantId") if opponent else None
         
         timeline_vision = self._process_vision_timeline(participant_id, opp_id, timeline_data, game_duration)
-        timeline_combat = self._process_combat_timeline(participant_id, timeline_data)
-
+        
         vision_per_min = c.get("visionScorePerMinute", 0)
         vision_score_normalized = min(100, int((vision_per_min / 3.5) * 100)) if vision_per_min else 0
         deaths = participant.get("deaths", 0)
@@ -195,6 +253,46 @@ class SupportAnalyzer(BaseRoleAnalyzer):
             {"axe": "Utilitaire", "scoreJoueur": 80, "scoreAdversaire": 75},
             {"axe": "Pression", "scoreJoueur": 55, "scoreAdversaire": 85}
         ]
+
+        combat_data = {}
+        if archetype == "ARTILLERY":
+            timeline_combat = self._process_combat_timeline(participant_id, timeline_data)
+            combat_data = {
+                "damageToChampions": participant.get("totalDamageDealtToChampions", 0),
+                "damageToChampionsOpponent": opponent.get("totalDamageDealtToChampions", 0) if opponent else 0,
+                "damagePerMinute": c.get("damagePerMinute", 0),
+                "damagePerMinuteOpponent": o_c.get("damagePerMinute", 0) if opponent else 0,
+                "teamDamagePercentage": c.get("teamDamagePercentage", 0),
+                "teamDamagePercentageOpponent": o_c.get("teamDamagePercentage", 0) if opponent else 0,
+                "killParticipation": kp,
+                "killParticipationOpponent": o_c.get("killParticipation", 0) if opponent else 0,
+                
+                "landSkillShotsEarlyGame": c.get("landSkillShotsEarlyGame", 0),
+                "landSkillShotsEarlyGameOpponent": o_c.get("landSkillShotsEarlyGame", 0) if opponent else 0,
+                "skillshotsHit": c.get("skillshotsHit", 0),
+                "skillshotsHitOpponent": o_c.get("skillshotsHit", 0) if opponent else 0,
+                "skillshotsDodged": c.get("skillshotsDodged", 0),
+                "skillshotsDodgedOpponent": o_c.get("skillshotsDodged", 0) if opponent else 0,
+                
+                "magicDamageDealtToChampions": participant.get("magicDamageDealtToChampions", 0),
+                "magicDamageDealtToChampionsOpponent": opponent.get("magicDamageDealtToChampions", 0) if opponent else 0,
+                
+                "longestTimeSpentLiving": participant.get("longestTimeSpentLiving", 0),
+                "longestTimeSpentLivingOpponent": opponent.get("longestTimeSpentLiving", 0) if opponent else 0,
+                
+                "timelineGraph": timeline_combat
+            }
+        else:
+            combat_data = {
+                "kills": participant.get("kills", 0),
+                "deaths": deaths,
+                "assists": participant.get("assists", 0),
+                "killParticipation": kp,
+                "killParticipationOpponent": o_c.get("killParticipation", 0) if opponent else 0,
+                "damageShielded": participant.get("totalDamageShieldedOnTeammates", 0),
+                "heals": participant.get("totalHealsOnTeammates", 0),
+                "ccTime": participant.get("timeCCingOthers", 0)
+            }
 
         tabs_data = {
             "vision": {
@@ -217,34 +315,7 @@ class SupportAnalyzer(BaseRoleAnalyzer):
                 "avgPreObjectiveWards": timeline_vision["avg_pre_objective_wards"],
                 "timelineGraph": timeline_vision["graph_data"]
             },
-            "combat": {
-                # Données primaires de combat pour Artilleur
-                "damageToChampions": participant.get("totalDamageDealtToChampions", 0),
-                "damageToChampionsOpponent": opponent.get("totalDamageDealtToChampions", 0) if opponent else 0,
-                "damagePerMinute": c.get("damagePerMinute", 0),
-                "damagePerMinuteOpponent": o_c.get("damagePerMinute", 0) if opponent else 0,
-                "teamDamagePercentage": c.get("teamDamagePercentage", 0),
-                "teamDamagePercentageOpponent": o_c.get("teamDamagePercentage", 0) if opponent else 0,
-                "killParticipation": kp,
-                "killParticipationOpponent": o_c.get("killParticipation", 0) if opponent else 0,
-                
-                # Expertise Mécanique (Skillshots & Spacing)
-                "landSkillShotsEarlyGame": c.get("landSkillShotsEarlyGame", 0),
-                "landSkillShotsEarlyGameOpponent": o_c.get("landSkillShotsEarlyGame", 0) if opponent else 0,
-                "skillshotsHit": c.get("skillshotsHit", 0),
-                "skillshotsHitOpponent": o_c.get("skillshotsHit", 0) if opponent else 0,
-                "skillshotsDodged": c.get("skillshotsDodged", 0),
-                "skillshotsDodgedOpponent": o_c.get("skillshotsDodged", 0) if opponent else 0,
-                
-                "magicDamageDealtToChampions": participant.get("magicDamageDealtToChampions", 0),
-                "magicDamageDealtToChampionsOpponent": opponent.get("magicDamageDealtToChampions", 0) if opponent else 0,
-                
-                "longestTimeSpentLiving": participant.get("longestTimeSpentLiving", 0),
-                "longestTimeSpentLivingOpponent": opponent.get("longestTimeSpentLiving", 0) if opponent else 0,
-                
-                # Évolution temporelle
-                "timelineGraph": timeline_combat
-            }
+            "combat": combat_data
         }
 
         return {

@@ -6,13 +6,15 @@
  * DESCRIPTION :
  * Graphe temporel dédié au combat pour le rôle de Support. 
  * * CORRECTIONS SYSTEM DESIGN :
- * - Courbe alignée sur la couleur standard du joueur (#0ea5e9).
- * - Icônes centrées mathématiquement (transform-origin: 12px 12px) pour 
- * un effet de zoom parfait au survol sans décalage.
+ * - Courbe principale en #0ea5e9 (text-lol-info).
+ * - Icônes centrées mathématiquement (transform-origin) pour un zoom parfait.
+ * - AJOUT : Ligne de tendance de DPM. Relie géométriquement par un segment 
+ * droit (type="linear") l'origine, les points d'achats, et la fin de partie, 
+ * via l'interpolation connectNulls=true.
  * ============================================================================
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     LineChart,
     Line,
@@ -38,7 +40,6 @@ const CustomItemDot = (props) => {
 
     return (
         <svg x={cx - 12} y={cy - 12} width={24} height={24} className="overflow-visible z-10">
-            {/* L'ajout du transformOrigin centre le point de grossissement au milieu du SVG */}
             <g className="transition-transform duration-200 hover:scale-[1.4] cursor-pointer" style={{ transformOrigin: '12px 12px' }}>
                 <image href={imgUrl} width={24} height={24} clipPath="circle(12px at center)" />
                 <circle cx="12" cy="12" r="12" stroke="#eab308" strokeWidth="2" fill="none" />
@@ -56,7 +57,8 @@ const formatExactTime = (ms) => {
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-        const data = payload[0].payload;
+        // On récupère les données de la courbe principale (pas la trendline)
+        const data = payload.find(p => p.dataKey === 'totalDamage')?.payload || payload[0].payload;
         return (
             <div className="bg-surface-solid p-3 border border-border-glass text-xs rounded-md shadow-lg z-50">
                 <p className="text-gray-100 font-bold mb-2 pb-1 border-b border-border-strong">
@@ -80,7 +82,25 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const SupportCombatChart = ({ chartData }) => {
-    if (!chartData || chartData.length === 0) {
+
+    // Génération de la donnée fantôme "trendDamage" pour les droites d'accélération
+    const processedData = useMemo(() => {
+        if (!chartData || chartData.length === 0) return [];
+
+        return chartData.map((point, index) => {
+            const isFirst = index === 0;
+            const isLast = index === chartData.length - 1;
+            const hasItem = point.itemIds && point.itemIds.length > 0;
+
+            return {
+                ...point,
+                // On n'attribue une valeur que sur les points d'inflexion
+                trendDamage: (isFirst || isLast || hasItem) ? point.totalDamage : null
+            };
+        });
+    }, [chartData]);
+
+    if (!processedData || processedData.length === 0) {
         return (
             <div className="h-64 flex items-center justify-center border border-border-glass bg-surface-solid/50 rounded text-lol-textMuted text-xs">
                 Données temporelles indisponibles
@@ -97,7 +117,7 @@ const SupportCombatChart = ({ chartData }) => {
             <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart
-                        data={chartData}
+                        data={processedData}
                         margin={{ top: 20, right: 20, left: 0, bottom: 5 }}
                     >
                         <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
@@ -123,7 +143,21 @@ const SupportCombatChart = ({ chartData }) => {
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#444', strokeWidth: 1, strokeDasharray: '5 5' }} />
 
-                        {/* Remplacement du #2debb1 par la couleur standard text-lol-info (#0ea5e9) */}
+                        {/* 1. La Ligne de Tendance (placée en premier pour être dessinée SOUS la courbe principale) */}
+                        <Line
+                            type="linear" // Trace des droites mathématiques parfaites
+                            dataKey="trendDamage"
+                            name="Tendance DPM"
+                            stroke="#666666" // Gris neutre discret
+                            strokeWidth={1}
+                            strokeDasharray="5 5"
+                            connectNulls={true} // Astuce clé : ignore les nulls pour lier les achats
+                            dot={false}
+                            activeDot={false}
+                            isAnimationActive={false}
+                        />
+
+                        {/* 2. La Courbe Principale (Dégâts lissés) */}
                         <Line
                             type="monotone"
                             dataKey="totalDamage"

@@ -16,7 +16,7 @@ from app.services.analysis.base_analyzer import BaseRoleAnalyzer
 
 class JungleAnalyzer(BaseRoleAnalyzer):
 
-    def analyze(self, participant: Dict[str, Any], match_data: Dict[str, Any], opponent: Dict[str, Any] = None) -> Dict[str, Any]:
+    def analyze(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Génère l'empreinte complète du Jungler en calculant les métriques expertes
         (CS pur jungle, efficacité des Smites, deltas de vision) et en construisant
