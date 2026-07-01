@@ -227,3 +227,38 @@ La sous-vue Combat du Support introduit le rendu conditionnel basé sur l'arché
 * **Statistiques Spécifiques :** Dégâts absorbés (Enchanteur), Temps de contrôle (Vanguard), Temps d'entrave (Catcher), Part des dégâts de l'équipe (Artilleur).
 * **Cartes Dynamiques :** Des indicateurs n'apparaissent que si une condition d'exploit ou d'alerte est remplie (ex: "Carry Caché" si le support inflige plus de dégâts que son ADC, ou "Ange Gardien" s'il a 0 kill et plus de 15 assists).
 
+### 8.4. Implémentation du Pattern Strategy (Scalabilité des Rôles)
+Le POC Support a été consolidé vers une architecture définitive et scalable via le design pattern Strategy.
+
+* **Backend** : Création d'une classe abstraite BaseRoleAnalyzer héritée par SupportAnalyzer et JungleAnalyzer. Le backend détermine dynamiquement le rôle d'un joueur, charge ses archétypes, et instancie la classe correspondante.
+
+* **Frontend** : Remplacement des cartes spécifiques par un contrôleur agnostique (RoleAnalysisController) qui route dynamiquement les données vers les composants experts appropriés (SupportVisionView, SupportCombatView, JungleObjectivesView, etc.).
+
+# 9. Standardisation du Design System et Ingénierie de Combat
+Afin de garantir une interface professionnelle et lisible, un Design System strict a été imposé sur l'ensemble des vues expertes, couplé à une refonte de l'ingestion temporelle pour supporter les analyses de combat.
+
+### 9.1. Composants UI Universels et Grille Stricte
+* **Standardisation des Cartes** : Adoption d'un layout inflexible (Titre muté, Donnée primaire centrale, Donnée secondaire/Ratio en dessous, et Footer descriptif) sans aucun diviseur interne (border-t) pour réduire le bruit visuel et prioriser la donnée.
+
+* **Composants Primitifs** : Création de StatDelta.jsx (calcul dynamique des écarts avec l'adversaire et application sémantique de couleurs de victoire/défaite selon la polarité de la stat) et de CircularGauge.jsx (jauges de proportion animées normalisées).
+
+* **Charte Colorimétrique** : Suppression des couleurs arbitraires. Les métriques du joueur utilisent le bleu standard (text-lol-info), tandis que les couleurs d'alerte (lol-win, lol-loss) sont strictement réservées aux deltas de comparaison.
+
+### 9.2. Ingénierie Temporelle et DataTrimmer
+Le besoin de tracer la courbe de pression offensive (Dégâts) a nécessité une mise à jour du contrat de données.
+
+* **Extraction des damageStats** : Le trimmer.py a été mis à jour pour extraire et conserver l'évolution des dégâts totaux à chaque minute (frame) de la timeline de Riot.
+
+* **Filtrage des Achats** : Le trimmer conserve les événements ITEM_PURCHASED. Le backend les croise avec une liste blanche stricte (objets Légendaires et Mythiques) pour identifier les "Power Spikes" sans polluer les graphiques avec des composants mineurs ou consommables.
+
+* **Réhydratation à Froid (Backfill)** : Exécution du script backfill_from_cold.py pour retraiter les payloads JSON bruts stockés sur le disque local et injecter rétroactivement les données de dégâts et d'objets dans les timelines PostgreSQL existantes, sans aucun appel réseau.
+
+### 9.3. Graphes Augmentés (Data-Visualisation)
+Les graphiques temporels (Recharts) ont été dotés de comportements personnalisés avancés.
+
+* **Incrustation Contextuelle (CustomItemDot)** : Les achats d'objets majeurs sont incrustés directement sur la courbe des dégâts via des rendus SVG asynchrones (DataDragon) au timer exact de l'acquisition.
+
+* **Zoom Mathématique** : L'utilisation de transform-origin au centre du SVG permet aux icônes d'objets de grossir au survol sans quitter le point d'ancrage de la courbe, garantissant une interaction visuelle fluide.
+
+* **Hydratation des Deltas Adverses** : Le backend s'assure désormais de calculer toutes les statistiques adverses transverses (Part de dégâts de l'équipe adverse, Pénétration de vision adverse) absentes de l'API Riot d'origine pour alimenter le composant StatDelta de manière mathématiquement symétrique.
+

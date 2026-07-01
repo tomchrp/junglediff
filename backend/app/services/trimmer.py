@@ -5,11 +5,10 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Service de traitement de données (Data Engineering).
-Agit comme un filtre entonnoir sur les payloads JSON massifs de l'API Riot Games 
-pour imposer un contrat de données strict. 
-L'extraction des "challenges" a été rendue dynamique pour absorber automatiquement 
-les nouvelles métriques nécessaires aux futures analyses de rôles (Support, Top, etc.) 
-sans alourdir significativement la colonne JSONB de PostgreSQL.
+Filtre les payloads JSON massifs de l'API Riot Games pour imposer un contrat de données strict. 
+* MODIFICATION : Le trimmer conserve désormais le nœud `damageStats` dans les 
+participantFrames de la timeline. Cela permet de tracer la courbe de dégâts 
+minute par minute pour les analyses de combat (Mages, ADC, etc.).
 ===============================================================================
 """
 
@@ -21,13 +20,8 @@ class DataTrimmer:
     def trim_match_details(raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Disséque le JSON brut des détails de fin de partie (Match V5).
-        
-        Processus :
-        1. Extrait les métadonnées globales et les objectifs d'équipe.
-        2. Isole chaque participant et ne conserve que les clés racines vitales.
-        3. Capture l'intégralité du nœud "challenges" (paires clé-valeur plates) 
-           en purgeant les valeurs nulles pour garantir l'évolutivité des analyses 
-           sans avoir à redéployer le trimmer.
+        Extrait les métadonnées, les objectifs et les statistiques vitales des participants,
+        incluant le dictionnaire complet des "challenges".
         """
         if not raw_data or "info" not in raw_data:
             return {}
@@ -47,7 +41,6 @@ class DataTrimmer:
             }
         }
 
-        # 1. Extraction des objectifs d'équipe
         for team in info.get("teams", []):
             objectives = team.get("objectives", {})
             trimmed_data["info"]["teams"].append({
@@ -62,7 +55,6 @@ class DataTrimmer:
                 }
             })
 
-        # 2. Extraction des participants
         for p in info.get("participants", []):
             trimmed_participant = {
                 "puuid": p.get("puuid"),
@@ -81,7 +73,6 @@ class DataTrimmer:
                 "summoner1Id": p.get("summoner1Id"),
                 "summoner2Id": p.get("summoner2Id"),
                 
-                # Économie, Combat et Objectifs
                 "goldEarned": p.get("goldEarned", 0),
                 "totalDamageDealtToChampions": p.get("totalDamageDealtToChampions", 0),
                 "totalMinionsKilled": p.get("totalMinionsKilled", 0),
@@ -93,13 +84,13 @@ class DataTrimmer:
                 "dragonKills": p.get("dragonKills", 0),
                 "baronKills": p.get("baronKills", 0),
                 
-                # Utilitaire et Contrôle
                 "totalDamageShieldedOnTeammates": p.get("totalDamageShieldedOnTeammates", 0),
                 "totalHealsOnTeammates": p.get("totalHealsOnTeammates", 0),
                 "timeCCingOthers": p.get("timeCCingOthers", 0),
                 "totalTimeCCDealt": p.get("totalTimeCCDealt", 0),
+                "longestTimeSpentLiving": p.get("longestTimeSpentLiving", 0),
+                "magicDamageDealtToChampions": p.get("magicDamageDealtToChampions", 0),
                 
-                # Vision (Racines)
                 "visionScore": p.get("visionScore", 0),
                 "wardsKilled": p.get("wardsKilled", 0),
                 "wardsPlaced": p.get("wardsPlaced", 0),
@@ -107,7 +98,6 @@ class DataTrimmer:
                 "detectorWardsPlaced": p.get("detectorWardsPlaced", 0),
                 "stealthWardsPlaced": p.get("stealthWardsPlaced", 0),
 
-                # Sorts
                 "spell1Casts": p.get("spell1Casts", 0),
                 "spell2Casts": p.get("spell2Casts", 0),
                 "spell3Casts": p.get("spell3Casts", 0),
@@ -134,7 +124,6 @@ class DataTrimmer:
             except Exception:
                 pass 
                 
-            # 3. Extraction dynamique des challenges (Future-proof)
             raw_challenges = p.get("challenges", {})
             trimmed_participant["challenges"] = {
                 k: v for k, v in raw_challenges.items() if v is not None
@@ -147,8 +136,9 @@ class DataTrimmer:
     @staticmethod
     def trim_match_timeline(raw_timeline: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Disséque le JSON brut de la timeline d'une partie.
-        Ne conserve que l'état des frames et une liste blanche d'événements stricts.
+        Disséque le JSON brut de la timeline.
+        Conserve l'état des frames (positions, or, et désormais les statistiques de dégâts) 
+        et une liste blanche d'événements stricts.
         """
         if not raw_timeline or "info" not in raw_timeline:
             return {}
@@ -165,7 +155,7 @@ class DataTrimmer:
         }
 
         for frame in raw_timeline.get("info", {}).get("frames", []):
-            trimmed_frame = {"participantFrames": {}, "events": []}
+            trimmed_frame = {"participantFrames": {}, "events": [], "timestamp": frame.get("timestamp", 0)}
             
             for p_id, p_data in frame.get("participantFrames", {}).items():
                 trimmed_frame["participantFrames"][p_id] = {
@@ -174,7 +164,9 @@ class DataTrimmer:
                     "level": p_data.get("level"),
                     "minionsKilled": p_data.get("minionsKilled"),
                     "jungleMinionsKilled": p_data.get("jungleMinionsKilled"),
-                    "timeEnemySpentControlled": p_data.get("timeEnemySpentControlled")
+                    "timeEnemySpentControlled": p_data.get("timeEnemySpentControlled"),
+                    # Ajout majeur : Conservation du dictionnaire des dégâts
+                    "damageStats": p_data.get("damageStats", {}) 
                 }
                 
             for event in frame.get("events", []):

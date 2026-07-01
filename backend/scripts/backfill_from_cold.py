@@ -9,6 +9,8 @@ Parcourt récursivement le dossier 'cold_storage' pour récupérer les payloads
 JSON bruts de l'API Riot. Applique la dernière version du DataTrimmer et 
 met à jour la colonne JSONB de PostgreSQL sans solliciter l'API Riot ni 
 altérer les métadonnées existantes.
+* CORRECTION : Ajout du chargement explicite des variables d'environnement 
+avant l'initialisation de l'ORM pour éviter les crashs de Pydantic Settings.
 ===============================================================================
 """
 
@@ -18,16 +20,22 @@ import json
 import asyncio
 from pathlib import Path
 from sqlalchemy import update
+from dotenv import load_dotenv
 
-# Ajout du chemin parent pour permettre l'import des modules app
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 1. Définition des chemins absolus
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+COLD_STORAGE_DIR = os.path.join(BACKEND_DIR, "data", "cold_storage")
+
+# 2. Chargement explicite du fichier .env du backend
+env_path = os.path.join(BACKEND_DIR, ".env")
+load_dotenv(env_path)
+
+# 3. Ajout au PYTHONPATH pour permettre l'import des modules "app"
+sys.path.append(BACKEND_DIR)
 
 from app.db.session import AsyncSessionLocal
 from app.db.models import Match, MatchTimeline
 from app.services.trimmer import DataTrimmer
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-COLD_STORAGE_DIR = os.path.join(BASE_DIR, "data", "cold_storage")
 
 async def run_backfill():
     """
@@ -56,12 +64,10 @@ async def run_backfill():
                 with open(file_path, "r", encoding="utf-8") as f:
                     raw_data = json.load(f)
                 
-                # Le format de fichier attendu est : matchId_details.json ou matchId_timeline.json
                 parts = filename.split("_")
                 if len(parts) < 3:
                     continue
                 
-                # Reconstruction du match_id (ex: EUW1_123456)
                 match_id = f"{parts[0]}_{parts[1]}"
                 data_type = parts[2].replace(".json", "")
 
