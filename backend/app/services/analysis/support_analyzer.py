@@ -127,6 +127,54 @@ class SupportAnalyzer(BaseRoleAnalyzer):
             
         return {"damage_graph": damage_graph}
 
+    def _process_combat_vanguard_timeline(self, participant_id: int, timeline_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Parcourt la timeline pour extraire l'évolution des dégâts encaissés (totalDamageTaken)
+        et les associe aux achats d'objets majeurs du tank.
+        Utilise la méthode pop() pour éviter l'affectation multiple d'un objet
+        à plusieurs frames dans la même minute.
+        """
+        if not timeline_data or "info" not in timeline_data:
+            return {"damage_graph": []}
+
+        frames = timeline_data["info"].get("frames", [])
+        events = []
+        for frame in frames:
+            events.extend(frame.get("events", []))
+            
+        valid_legendary_items = self._get_valid_items()
+        
+        items_per_minute = {}
+        for event in events:
+            if event.get("type") == "ITEM_PURCHASED" and event.get("participantId") == participant_id:
+                item_id = event.get("itemId")
+                
+                if item_id in valid_legendary_items:
+                    minute = int(event.get("timestamp", 0) // 60000)
+                    if minute not in items_per_minute:
+                        items_per_minute[minute] = []
+                    items_per_minute[minute].append(item_id)
+
+        damage_graph = []
+        for frame in frames:
+            ts = frame.get("timestamp", 0)
+            minute = int(ts // 60000)
+            
+            p_frames = frame.get("participantFrames", {})
+            p_data = p_frames.get(str(participant_id), {})
+            # Spécificité Vanguard : on trace l'encaissement
+            damage = p_data.get("damageStats", {}).get("totalDamageTaken", 0)
+            
+            item_ids = items_per_minute.pop(minute, [])
+            
+            damage_graph.append({
+                "timestamp": ts,
+                "totalDamage": damage, # Nom de clé conservé pour compatibilité avec SupportCombatChart
+                "itemIds": item_ids
+            })
+            
+        return {"damage_graph": damage_graph}
+    
     def _process_vision_timeline(self, participant_id: int, opp_id: int, timeline_data: Dict[str, Any], game_duration: int) -> Dict[str, Any]:
         """
         Extrait les événements liés à la vision (balises posées, détruites) et 
@@ -279,6 +327,30 @@ class SupportAnalyzer(BaseRoleAnalyzer):
                 
                 "longestTimeSpentLiving": participant.get("longestTimeSpentLiving", 0),
                 "longestTimeSpentLivingOpponent": opponent.get("longestTimeSpentLiving", 0) if opponent else 0,
+                
+                "timelineGraph": timeline_combat
+            }
+        elif archetype == "VANGUARD":
+            timeline_combat = self._process_combat_vanguard_timeline(participant_id, timeline_data)
+            combat_data = {
+                "archetype": "VANGUARD",
+                "damageSelfMitigated": participant.get("damageSelfMitigated", 0),
+                "damageSelfMitigatedOpponent": opponent.get("damageSelfMitigated", 0) if opponent else 0,
+                "totalDamageTaken": participant.get("totalDamageTaken", 0),
+                "totalDamageTakenOpponent": opponent.get("totalDamageTaken", 0) if opponent else 0,
+                "damageTakenOnTeamPercentage": c.get("damageTakenOnTeamPercentage", 0),
+                "damageTakenOnTeamPercentageOpponent": o_c.get("damageTakenOnTeamPercentage", 0) if opponent else 0,
+                "killParticipation": kp,
+                "killParticipationOpponent": o_c.get("killParticipation", 0) if opponent else 0,
+                
+                "timeCCingOthers": participant.get("timeCCingOthers", 0),
+                "timeCCingOthersOpponent": opponent.get("timeCCingOthers", 0) if opponent else 0,
+                "enemyChampionImmobilizations": c.get("enemyChampionImmobilizations", 0),
+                "enemyChampionImmobilizationsOpponent": o_c.get("enemyChampionImmobilizations", 0) if opponent else 0,
+                "immobilizeAndKillWithAlly": c.get("immobilizeAndKillWithAlly", 0),
+                "immobilizeAndKillWithAllyOpponent": o_c.get("immobilizeAndKillWithAlly", 0) if opponent else 0,
+                "tookLargeDamageSurvived": c.get("tookLargeDamageSurvived", 0),
+                "tookLargeDamageSurvivedOpponent": o_c.get("tookLargeDamageSurvived", 0) if opponent else 0,
                 
                 "timelineGraph": timeline_combat
             }

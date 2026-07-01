@@ -262,3 +262,17 @@ Les graphiques temporels (Recharts) ont été dotés de comportements personnali
 
 * **Hydratation des Deltas Adverses** : Le backend s'assure désormais de calculer toutes les statistiques adverses transverses (Part de dégâts de l'équipe adverse, Pénétration de vision adverse) absentes de l'API Riot d'origine pour alimenter le composant StatDelta de manière mathématiquement symétrique.
 
+
+## Mise à jour : Architecture Archétype "VANGUARD" (Support)
+
+### 1. Cycle de la donnée (Backend)
+*   **DataTrimmer (`trimmer.py`) :** Élargissement de la liste d'inclusion (whitelist) pour le passage des données du "Cold Storage" (Riot API) au "Hot Storage" (Base de données). Ajout des clés `damageSelfMitigated` et `totalDamageTaken` vitales pour l'analyse des tanks. Les métriques avancées d'engagement issues du nœud `challenges` (`enemyChampionImmobilizations`, `immobilizeAndKillWithAlly`, `tookLargeDamageSurvived`) sont extraites dynamiquement.
+*   **SupportAnalyzer (`support_analyzer.py`) :** Ajout d'une logique de traitement conditionnel basée sur l'archétype du champion analysé.
+    *   Création de la méthode `_process_combat_vanguard_timeline` : Génère une timeline temporelle traçant l'évolution de l'encaissement (dégâts subis) croisée avec l'acquisition d'objets majeurs.
+    *   Constitution d'un objet de données de combat spécifique aux Vanguards, centré sur la mitigation, l'entrave, et la résilience, remplaçant les statistiques offensives de l'archétype `ARTILLERY`.
+
+### 2. System Design (Frontend)
+*   **Composant Structurel (`StatCard.jsx`) :** Introduction d'un composant générique d'encapsulation. Il impose une disposition Flexbox stricte et extensible (`h-full`, `flex-1`), garantissant l'alignement vertical parfait de toutes les cartes d'une même grille, qu'elles contiennent un pied de page ou non. Élimine le besoin de marges codées en dur.
+*   **Routage Visuel (`SupportCombatView.jsx`) :** Transformation du composant en routeur de rendu conditionnel basé sur `data.archetype`. 
+    *   Implémentation de la vue experte Vanguard traduisant les concepts techniques (Mitigation, Aides létales sous contrôle) en interfaces claires pour l'utilisateur.
+    *   Refonte complète du code pour consommer le nouveau composant `StatCard`, assurant la standardisation de l'affichage.

@@ -9,6 +9,8 @@ Filtre les payloads JSON massifs de l'API Riot Games pour imposer un contrat de 
 * MODIFICATION : Le trimmer conserve désormais le nœud `damageStats` dans les 
 participantFrames de la timeline. Cela permet de tracer la courbe de dégâts 
 minute par minute pour les analyses de combat (Mages, ADC, etc.).
+* MODIFICATION : Ajout de damageSelfMitigated et totalDamageTaken pour l'analyse
+des tanks (archétype VANGUARD).
 ===============================================================================
 """
 
@@ -91,6 +93,11 @@ class DataTrimmer:
                 "longestTimeSpentLiving": p.get("longestTimeSpentLiving", 0),
                 "magicDamageDealtToChampions": p.get("magicDamageDealtToChampions", 0),
                 
+                # --- AJOUTS VANGUARD ---
+                "damageSelfMitigated": p.get("damageSelfMitigated", 0),
+                "totalDamageTaken": p.get("totalDamageTaken", 0),
+                # -----------------------
+                
                 "visionScore": p.get("visionScore", 0),
                 "wardsKilled": p.get("wardsKilled", 0),
                 "wardsPlaced": p.get("wardsPlaced", 0),
@@ -165,7 +172,7 @@ class DataTrimmer:
                     "minionsKilled": p_data.get("minionsKilled"),
                     "jungleMinionsKilled": p_data.get("jungleMinionsKilled"),
                     "timeEnemySpentControlled": p_data.get("timeEnemySpentControlled"),
-                    # Ajout majeur : Conservation du dictionnaire des dégâts
+                    # Conservation du dictionnaire des dégâts
                     "damageStats": p_data.get("damageStats", {}) 
                 }
                 
