@@ -292,3 +292,20 @@ L'approche des "Vues Hardcodées" (ex: `SupportCombatView.jsx`, `JungleResources
 La dette technique liée à la duplication des algorithmes de parcours temporel (timeline) dans les analyseurs enfants a été éradiquée via le pattern *Template Method / Dependency Injection*.
 * **Moteur Parent (`BaseRoleAnalyzer`) :** Centralise la logique lourde. Il gère le cache Data Dragon et exécute la boucle de parcours des frames de la timeline (`_extract_timeline_data`).
 * **Injection par Lambda (`support_analyzer.py`, `jungle_analyzer.py`) :** Les classes enfants ne contiennent plus de logique structurelle. Elles délèguent le traitement au parent en lui injectant simplement une fonction lambda (Extracteur) dictant quelle métrique précise doit être récupérée à l'instant T (ex: `totalDamageTaken` pour un Vanguard, `totalDamageDoneToChampions` pour une Artillery).
+
+## 11. Refonte Anti-God Files : Pattern Registry et Composition (Juillet 2026)
+
+L'approche décrite dans la Section 10 a montré ses limites (risque d'explosion combinatoire et création de "God Files"). Pour anticiper l'ajout des rôles Top, Mid et Bot (multipliés par leurs archétypes respectifs), l'architecture a basculé d'un modèle d'héritage monolithique vers un modèle de **Composition stricte via Inversion de Contrôle**.
+
+### 11.1. Frontend : Éclatement de la Configuration (Registry Pattern)
+Le fichier `roleLayouts.js`, devenu trop massif, a été démantelé.
+* **Arborescence Modulaire :** Le layout de chaque archétype est désormais isolé dans son propre fichier (ex: `roles/support/vanguard.js`, `roles/jungle/assassin.js`).
+* **Partage de Vues :** Les grilles communes (ex: l'analyse de vision pour les supports) sont isolées dans `shared/visionLayouts.js` et importées au besoin pour éviter la duplication.
+* **Le Registre (`layouts/index.js`) :** Un fichier central assemble silencieusement ces modules au démarrage pour reformer le grand dictionnaire attendu par `RoleAnalysisController`. L'ajout d'un archétype ne génère plus aucun conflit de fusion.
+
+### 11.2. Backend : Moteur Statistique par Composants
+Les fichiers monolithiques (`support_analyzer.py`, `jungle_analyzer.py`) ont été supprimés. L'extraction des statistiques est déléguée à de petites briques spécialisées (Modules) obéissant à une interface stricte (`BaseMetricModule`).
+
+* **Isolation des Domaines :** L'extraction de données est segmentée géographiquement ou thématiquement. Par exemple, un `VanguardCombatModule` ne gère que les statistiques d'encaissement et de CC, ignorant tout le reste.
+* **Orchestrateur Aveugle (`orchestrator.py`) :** Remplace l'ancienne usine à if/else. Il détermine l'archétype, lit un dictionnaire de registre (`registry.py`), instancie la liste des modules requis de manière agnostique (Duck Typing) et fusionne leurs dictionnaires de retour.
+* **Persistance de l'Héritage Utilitaire :** Bien que l'architecture soit compositionnelle, les modules complexes (Combat) héritent toujours de `BaseRoleAnalyzer` exclusivement pour exploiter son cache partagé Data Dragon et son moteur de parcours temporel (`_extract_timeline_data`), garantissant d'excellentes performances.

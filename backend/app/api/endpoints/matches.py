@@ -20,8 +20,7 @@ from app.db.session import get_db
 from app.db.repositories import MatchRepository
 from app.db.models import MatchTimeline, Match
 from app.services.sync_service import SyncService
-from app.services.analysis.jungle_analyzer import JungleAnalyzer
-from app.services.analysis.support_analyzer import SupportAnalyzer
+from app.services.analysis.orchestrator import AnalysisOrchestrator
 
 router = APIRouter()
 
@@ -174,16 +173,20 @@ async def get_role_analysis(match_id: str, role: str, puuid: str, db: AsyncSessi
 
     # Factory simple : Sélection de l'analyseur
     role_upper = role.upper()
-    if role_upper == "JUNGLE":
-        analyzer = JungleAnalyzer()
-    elif role_upper == "UTILITY":
-        analyzer = SupportAnalyzer()
-    else:
-        raise HTTPException(status_code=400, detail=f"L'analyse pour le rôle {role} n'est pas encore supportée.")
+    
+    # L'API Riot renvoie "UTILITY" pour le rôle Support, nous le maptons sur notre nomenclature
+    internal_role = "SUPPORT" if role_upper == "UTILITY" else role_upper
 
-    # Exécution de l'analyse avec la timeline
-    analysis_result = analyzer.analyze(target_participant, raw_match_data, raw_timeline_data, opponent)
-
+    # Instanciation de l'Orchestrateur et exécution de l'analyse
+    orchestrator = AnalysisOrchestrator()
+    analysis_result = orchestrator.analyze_match(
+        role=internal_role, 
+        participant=target_participant, 
+        match_data=raw_match_data, 
+        timeline_data=raw_timeline_data, 
+        opponent=opponent
+    )
+    
     return {
         "status": "ready",
         "data": analysis_result
