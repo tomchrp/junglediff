@@ -5,13 +5,13 @@
  *
  * DESCRIPTION :
  * Orchestrateur hybride pour l'analyse des rôles.
- * Ce composant gère le routage des données vers les vues expertes.
- * Il implémente désormais la logique "Configuration-Driven UI" : 
- * 1. Il lit le métadonnées du backend (rôle et archétype).
- * 2. Il interroge le dictionnaire `roleLayouts`.
- * 3. Si une configuration existe, il génère les onglets dynamiquement via `DynamicExpertView`.
- * 4. Sinon, il applique un comportement de rétrocompatibilité pour les rôles 
- * non encore migrés (comme la Jungle).
+ * 100% piloté par la configuration (Configuration-Driven UI).
+ * Il n'y a plus aucun import de vues expertes codées en dur.
+ * 
+ * MODIFICATIONS :
+ * - Purge totale des anciens imports de la Jungle.
+ * - Intégration de l'évaluation `isArchetypeMismatch` transmise au moteur 
+ *   pour censurer les comparaisons de statistiques asymétriques.
  * ============================================================================
  */
 
@@ -20,12 +20,6 @@ import axios from 'axios';
 import RoleAnalysisDashboard from './shared/RoleAnalysisDashboard.jsx';
 import DynamicExpertView from './shared/DynamicExpertView.jsx';
 import { roleLayouts } from '../../../core/configs/roleLayouts.js';
-
-// Imports de rétrocompatibilité pour la Jungle (à supprimer une fois migrés)
-import JungleResourcesView from './jungle/JungleResourcesView.jsx';
-import JungleObjectivesView from './jungle/JungleObjectivesView.jsx';
-import JungleCombatView from './jungle/JungleCombatView.jsx';
-import JungleVisionView from './jungle/JungleVisionView.jsx';
 
 // Dictionnaire de traduction des identifiants d'onglets pour l'interface utilisateur
 const TAB_LABELS = {
@@ -40,11 +34,6 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    /**
-     * Effectue la récupération asynchrone des données d'analyse via l'API.
-     * Attend la fin du chargement de la timeline en amont pour éviter les appels dans le vide.
-     * Utilise un intervalle de polling pour pallier les temps de calcul backend.
-     */
     useEffect(() => {
         let pollingInterval;
         const abortController = new AbortController();
@@ -93,16 +82,15 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
     if (error) return <div className="p-4 text-center text-lol-loss text-sm font-bold">{error}</div>;
 
     const { metadata, radar_data, insights, tabs_data } = analysisData;
-
-    // Tentative de récupération du layout dans le dictionnaire via les clés standardisées du backend
     const currentRoleLayout = roleLayouts[metadata.role]?.[metadata.archetype];
+
+    // Détection du conflit d'archétype sur la lane pour la censure des Deltas
+    const isArchetypeMismatch = metadata.opponentArchetype
+        ? metadata.archetype !== metadata.opponentArchetype
+        : false;
+
     let tabsConfig = [];
 
-    /**
-     * Logique de routage :
-     * Si une configuration existe dans roleLayouts, on génère les vues via l'usine DynamicExpertView.
-     * Sinon, on vérifie si des vues hardcodées existent en secours (cas de la Jungle actuelle).
-     */
     if (currentRoleLayout) {
         tabsConfig = Object.keys(currentRoleLayout).map(tabKey => ({
             id: tabKey,
@@ -112,6 +100,7 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
                     layout={currentRoleLayout[tabKey]}
                     data={tabs_data[tabKey]}
                     versionDDragon={versionDDragon}
+                    isMismatch={isArchetypeMismatch}
                 />
             )
         }));
