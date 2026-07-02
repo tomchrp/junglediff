@@ -9,20 +9,18 @@ Transforme les données brutes (détails et timeline) en métriques avancées
 exploitables par le frontend.
 
 MODIFICATIONS RÉCENTES :
-- Correction du bug d'affichage en double des objets en fin de partie via la 
-  consommation destructive (pop) du dictionnaire temporel.
+- Refonte Architecturale : Suppression de la duplication de logique temporelle.
+  Délégation du parcours des frames et de la gestion Data Dragon au parent 
+  (BaseRoleAnalyzer) via l'injection d'une fonction d'extraction (Lambda).
 ===============================================================================
 """
 
 import json
 import os
-import urllib.request
-from typing import Dict, Any, Set
+from typing import Dict, Any
 from app.services.analysis.base_analyzer import BaseRoleAnalyzer
 
 class SupportAnalyzer(BaseRoleAnalyzer):
-    
-    _ddragon_items: Set[int] = None
     
     def __init__(self):
         self.archetypes = self._load_archetypes()
@@ -38,142 +36,6 @@ class SupportAnalyzer(BaseRoleAnalyzer):
                 return json.load(f)
         except FileNotFoundError:
             return {}
-
-    @classmethod
-    def _get_valid_items(cls) -> Set[int]:
-        """
-        Récupère dynamiquement les objets depuis Data Dragon.
-        Filtre et ne conserve que les objets dits "Majeurs" (Légendaires/Mythiques 
-        qui coûtent cher, ou les Bottes T2) pour ne pas polluer les graphiques.
-        Met le résultat en cache dans la classe lors du premier appel.
-        """
-        if cls._ddragon_items is not None:
-            return cls._ddragon_items
-            
-        try:
-            req_versions = urllib.request.Request("https://ddragon.leagueoflegends.com/api/versions.json", headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_versions) as response:
-                versions = json.loads(response.read().decode())
-                latest_version = versions[0]
-            
-            req_items = urllib.request.Request(f"https://ddragon.leagueoflegends.com/cdn/{latest_version}/data/fr_FR/item.json", headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_items) as response:
-                items_data = json.loads(response.read().decode())['data']
-                
-            valid_items = set()
-            for item_id, item_info in items_data.items():
-                gold = item_info.get("gold", {}).get("total", 0)
-                tags = item_info.get("tags", [])
-                depth = item_info.get("depth", 1)
-                
-                is_expensive = gold >= 2000
-                is_tier2_boots = ("Boots" in tags) and (depth >= 2)
-                
-                if is_expensive or is_tier2_boots:
-                    valid_items.add(int(item_id))
-                    
-            cls._ddragon_items = valid_items
-            return cls._ddragon_items
-            
-        except Exception as e:
-            print(f"[ERREUR] Impossible de charger Data Dragon : {e}")
-            return set()
-
-    def _process_combat_timeline(self, participant_id: int, timeline_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Parcourt la timeline pour extraire l'évolution des dégâts totaux
-        et les associe aux achats d'objets majeurs du joueur.
-        Utilise la méthode pop() pour éviter l'affectation multiple d'un objet
-        à plusieurs frames dans la même minute (notamment en fin de partie).
-        """
-        if not timeline_data or "info" not in timeline_data:
-            return {"damage_graph": []}
-
-        frames = timeline_data["info"].get("frames", [])
-        events = []
-        for frame in frames:
-            events.extend(frame.get("events", []))
-            
-        valid_legendary_items = self._get_valid_items()
-        
-        items_per_minute = {}
-        for event in events:
-            if event.get("type") == "ITEM_PURCHASED" and event.get("participantId") == participant_id:
-                item_id = event.get("itemId")
-                
-                if item_id in valid_legendary_items:
-                    minute = int(event.get("timestamp", 0) // 60000)
-                    if minute not in items_per_minute:
-                        items_per_minute[minute] = []
-                    items_per_minute[minute].append(item_id)
-
-        damage_graph = []
-        for frame in frames:
-            ts = frame.get("timestamp", 0)
-            minute = int(ts // 60000)
-            
-            p_frames = frame.get("participantFrames", {})
-            p_data = p_frames.get(str(participant_id), {})
-            damage = p_data.get("damageStats", {}).get("totalDamageDoneToChampions", 0)
-            
-            # Utilisation de pop() au lieu de get() pour consommer la donnée et éviter les doublons
-            item_ids = items_per_minute.pop(minute, [])
-            
-            damage_graph.append({
-                "timestamp": ts,
-                "totalDamage": damage,
-                "itemIds": item_ids
-            })
-            
-        return {"damage_graph": damage_graph}
-
-    def _process_combat_vanguard_timeline(self, participant_id: int, timeline_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Parcourt la timeline pour extraire l'évolution des dégâts encaissés (totalDamageTaken)
-        et les associe aux achats d'objets majeurs du tank.
-        Utilise la méthode pop() pour éviter l'affectation multiple d'un objet
-        à plusieurs frames dans la même minute.
-        """
-        if not timeline_data or "info" not in timeline_data:
-            return {"damage_graph": []}
-
-        frames = timeline_data["info"].get("frames", [])
-        events = []
-        for frame in frames:
-            events.extend(frame.get("events", []))
-            
-        valid_legendary_items = self._get_valid_items()
-        
-        items_per_minute = {}
-        for event in events:
-            if event.get("type") == "ITEM_PURCHASED" and event.get("participantId") == participant_id:
-                item_id = event.get("itemId")
-                
-                if item_id in valid_legendary_items:
-                    minute = int(event.get("timestamp", 0) // 60000)
-                    if minute not in items_per_minute:
-                        items_per_minute[minute] = []
-                    items_per_minute[minute].append(item_id)
-
-        damage_graph = []
-        for frame in frames:
-            ts = frame.get("timestamp", 0)
-            minute = int(ts // 60000)
-            
-            p_frames = frame.get("participantFrames", {})
-            p_data = p_frames.get(str(participant_id), {})
-            # Spécificité Vanguard : on trace l'encaissement
-            damage = p_data.get("damageStats", {}).get("totalDamageTaken", 0)
-            
-            item_ids = items_per_minute.pop(minute, [])
-            
-            damage_graph.append({
-                "timestamp": ts,
-                "totalDamage": damage, # Nom de clé conservé pour compatibilité avec SupportCombatChart
-                "itemIds": item_ids
-            })
-            
-        return {"damage_graph": damage_graph}
     
     def _process_vision_timeline(self, participant_id: int, opp_id: int, timeline_data: Dict[str, Any], game_duration: int) -> Dict[str, Any]:
         """
@@ -304,7 +166,10 @@ class SupportAnalyzer(BaseRoleAnalyzer):
 
         combat_data = {}
         if archetype == "ARTILLERY":
-            timeline_combat = self._process_combat_timeline(participant_id, timeline_data)
+            # On passe une lambda qui dit à la classe parente quelle stat extraire de la frame
+            extract_damage_fn = lambda p: {"totalDamage": p.get("damageStats", {}).get("totalDamageDoneToChampions", 0)}
+            timeline_combat = self._extract_timeline_data(participant_id, timeline_data, extract_damage_fn)
+            
             combat_data = {
                 "damageToChampions": participant.get("totalDamageDealtToChampions", 0),
                 "damageToChampionsOpponent": opponent.get("totalDamageDealtToChampions", 0) if opponent else 0,
@@ -331,7 +196,10 @@ class SupportAnalyzer(BaseRoleAnalyzer):
                 "timelineGraph": timeline_combat
             }
         elif archetype == "VANGUARD":
-            timeline_combat = self._process_combat_vanguard_timeline(participant_id, timeline_data)
+            # On passe une lambda qui indique au parent d'extraire l'encaissement
+            extract_tank_fn = lambda p: {"totalDamage": p.get("damageStats", {}).get("totalDamageTaken", 0)}
+            timeline_combat = self._extract_timeline_data(participant_id, timeline_data, extract_tank_fn)
+            
             combat_data = {
                 "archetype": "VANGUARD",
                 "damageSelfMitigated": participant.get("damageSelfMitigated", 0),

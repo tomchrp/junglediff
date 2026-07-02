@@ -5,115 +5,104 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Analyseur métier dédié au rôle de Jungler. 
-Extrait, calcule et normalise les statistiques de ressources (camps de jungle, 
-carapateurs), de contrôle d'objectifs (smites) et de pression sur la carte.
-Remplace intégralement la logique mathématique autrefois présente dans le frontend.
+* HARMONISATION : Supprime le pré-calcul manuel des Deltas. Fournit systématiquement
+les valeurs brutes avec la convention de nommage 'Opponent' pour permettre
+au composant React <StatDelta> de gérer l'affichage de manière agnostique.
 ===============================================================================
 """
 
+import json
+import os
 from typing import Dict, Any
 from app.services.analysis.base_analyzer import BaseRoleAnalyzer
 
 class JungleAnalyzer(BaseRoleAnalyzer):
 
+    def __init__(self):
+        self.archetypes = self._load_archetypes()
+
+    def _load_archetypes(self) -> Dict[str, str]:
+        file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "core", "dictionaries", "archetypes.json")
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+
     def analyze(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Génère l'empreinte complète du Jungler en calculant les métriques expertes
-        (CS pur jungle, efficacité des Smites, deltas de vision) et en construisant
-        le radar de performance et les insights textuels.
-        """
         c = participant.get("challenges", {})
         o_c = opponent.get("challenges", {}) if opponent else {}
         
-        # 1. Calculs des métriques complexes (Anciennement côté Frontend)
-        ally_jungle_cs = participant.get("totalAllyJungleMinionsKilled", 0)
-        enemy_jungle_cs = participant.get("totalEnemyJungleMinionsKilled", 0)
-        pure_jungle_monsters_cs = ally_jungle_cs + enemy_jungle_cs
-        pure_jungle_camps = pure_jungle_monsters_cs / 4
-        
-        scuttles = c.get("scuttleCrabKills", 0)
-        
-        # Smites et vols
-        epic_steals = c.get("epicMonsterSteals", 0)
-        pressure_smites = c.get("epicMonsterKillsNearEnemyJungler", 0)
-        humiliation_steals = c.get("epicMonsterStolenWithoutSmite", 0)
-        
-        # 2. Normalisation Radar (Échelle 0-100)
-        # TODO : Affiner les algorithmes de plafonnement pour une meilleure précision statistique
-        farm_score = min(100, int((c.get("jungleCsBefore10Minutes", 0) / 60) * 100)) if opponent else 50
-        vision_score = min(100, int((participant.get("visionScore", 0) / 60) * 100))
-        kp_score = int(c.get("killParticipation", 0) * 100)
-        objective_score = min(100, int(((participant.get("dragonKills", 0) + participant.get("baronKills", 0)) / 4) * 100))
-        
-        radar_data = [
-            {"axe": "Farm (Early)", "scoreJoueur": farm_score, "scoreAdversaire": 50}, # Adversaire stubbé temporairement
-            {"axe": "Vision", "scoreJoueur": vision_score, "scoreAdversaire": 50},
-            {"axe": "Presence (KP)", "scoreJoueur": kp_score, "scoreAdversaire": int(o_c.get("killParticipation", 0) * 100) if opponent else 50},
-            {"axe": "Objectifs", "scoreJoueur": objective_score, "scoreAdversaire": 50},
-            {"axe": "Pression", "scoreJoueur": min(100, (c.get("killsOnLanersEarlyJungleAsJungler", 0) * 20)), "scoreAdversaire": 50}
-        ]
+        champion_id = str(participant.get("championId"))
+        archetype = self.archetypes.get(champion_id, "NON DEFINI")
 
-        # 3. Génération des Insights (Narratif)
-        insights = []
-        if epic_steals > 0:
-            insights.append({"type": "positive", "title": "Voleur", "description": f"A volé {epic_steals} monstres épiques."})
-        if c.get("takedownsBeforeJungleMinionSpawn", 0) > 0:
-            insights.append({"type": "positive", "title": "Invade Sanglante", "description": "Impact décisif avant l'apparition des camps."})
-        if enemy_jungle_cs > (ally_jungle_cs * 0.3):
-             insights.append({"type": "positive", "title": "Contre-Jungle", "description": "Forte présence dans la jungle adverse."})
-        if humiliation_steals > 0:
-             insights.append({"type": "negative", "title": "Humiliation", "description": "A perdu un objectif épique sans que l'adversaire n'utilise Châtiment."})
-
-        # 4. Construction des données formatées pour les onglets (Dumb UI)
         tabs_data = {
             "resources": {
-                "totalCS": participant.get("totalMinionsKilled", 0) + participant.get("neutralMinionsKilled", 0),
-                "laneMinions": participant.get("totalMinionsKilled", 0),
-                "pureJungleCamps": pure_jungle_camps,
-                "pureJungleCS": pure_jungle_monsters_cs,
-                "scuttles": scuttles,
-                "allyJungleCS": ally_jungle_cs,
-                "enemyJungleCS": enemy_jungle_cs,
+                "allyJungleCS": participant.get("totalAllyJungleMinionsKilled", 0),
+                "allyJungleCSOpponent": opponent.get("totalAllyJungleMinionsKilled", 0) if opponent else 0,
+                "enemyJungleCS": participant.get("totalEnemyJungleMinionsKilled", 0),
+                "enemyJungleCSOpponent": opponent.get("totalEnemyJungleMinionsKilled", 0) if opponent else 0,
                 "buffsStolen": c.get("buffsStolen", 0),
+                "buffsStolenOpponent": o_c.get("buffsStolen", 0) if opponent else 0,
                 "goldEarned": participant.get("goldEarned", 0),
-                "goldDelta": participant.get("goldEarned", 0) - opponent.get("goldEarned", 0) if opponent else 0,
-                "jungleCsBefore10Minutes": c.get("jungleCsBefore10Minutes", 0)
+                "goldEarnedOpponent": opponent.get("goldEarned", 0) if opponent else 0,
+                "earlyGold": c.get("laneMinionsFirst10Minutes", 0), 
+                "earlyGoldOpponent": o_c.get("laneMinionsFirst10Minutes", 0) if opponent else 0,
+                "earlyXP": participant.get("champLevel", 0),
+                "earlyXPOpponent": opponent.get("champLevel", 0) if opponent else 0,
             },
             "objectives": {
-                "scuttles": scuttles,
-                "initialCrabCount": c.get("initialCrabCount", 0),
-                "epicSteals": epic_steals,
-                "pressureSmites": pressure_smites,
-                "humiliationSteals": humiliation_steals,
-                "damageToEpic": participant.get("damageDealtToEpicMonsters", 0),
-                "dragonKills": participant.get("dragonKills", 0),
-                "baronKills": participant.get("baronKills", 0)
+                "scuttles": c.get("scuttleCrabKills", 0),
+                "scuttlesOpponent": o_c.get("scuttleCrabKills", 0) if opponent else 0,
+                "epicSteals": c.get("epicMonsterSteals", 0),
+                "epicStealsOpponent": o_c.get("epicMonsterSteals", 0) if opponent else 0,
+                "earlyObjectives": c.get("takedownsFirstXMinutes", 0),
+                "earlyObjectivesOpponent": o_c.get("takedownsFirstXMinutes", 0) if opponent else 0,
+                "damageToEpic": participant.get("damageDealtToObjectives", 0),
+                "damageToEpicOpponent": opponent.get("damageDealtToObjectives", 0) if opponent else 0,
+                "dragonKills": c.get("dragonTakedowns", 0),
+                "dragonKillsOpponent": o_c.get("dragonTakedowns", 0) if opponent else 0,
+                "baronKills": c.get("baronTakedowns", 0),
+                "baronKillsOpponent": o_c.get("baronTakedowns", 0) if opponent else 0,
             },
             "combat": {
                 "damageToChampions": participant.get("totalDamageDealtToChampions", 0),
-                "damageDelta": participant.get("totalDamageDealtToChampions", 0) - opponent.get("totalDamageDealtToChampions", 0) if opponent else 0,
+                "damageToChampionsOpponent": opponent.get("totalDamageDealtToChampions", 0) if opponent else 0,
+                "damagePerMinute": c.get("damagePerMinute", 0),
+                "damagePerMinuteOpponent": o_c.get("damagePerMinute", 0) if opponent else 0,
                 "killParticipation": c.get("killParticipation", 0),
-                "kpDelta": c.get("killParticipation", 0) - o_c.get("killParticipation", 0) if opponent else 0,
+                "killParticipationOpponent": o_c.get("killParticipation", 0) if opponent else 0,
                 "earlyGanks": c.get("killsOnLanersEarlyJungleAsJungler", 0),
+                "earlyGanksOpponent": o_c.get("killsOnLanersEarlyJungleAsJungler", 0) if opponent else 0,
                 "ccTime": participant.get("timeCCingOthers", 0),
-                "contestedKills": c.get("junglerTakedownsNearDamagedEpicMonster", 0)
+                "ccTimeOpponent": opponent.get("timeCCingOthers", 0) if opponent else 0,
+                "contestedKills": c.get("junglerTakedownsNearDamagedEpicMonster", 0),
+                "contestedKillsOpponent": o_c.get("junglerTakedownsNearDamagedEpicMonster", 0) if opponent else 0,
             },
             "vision": {
                 "visionScore": participant.get("visionScore", 0),
-                "visionScoreDelta": participant.get("visionScore", 0) - opponent.get("visionScore", 0) if opponent else 0,
-                "visionScoreAdvantage": c.get("visionScoreAdvantageLaneOpponent", 0),
+                "visionScoreOpponent": opponent.get("visionScore", 0) if opponent else 0,
                 "visionPerMinute": c.get("visionScorePerMinute", 0),
+                "visionPerMinuteOpponent": o_c.get("visionScorePerMinute", 0) if opponent else 0,
                 "pinkWards": participant.get("visionWardsBoughtInGame", 0),
+                "pinkWardsOpponent": opponent.get("visionWardsBoughtInGame", 0) if opponent else 0,
                 "detectorWards": participant.get("detectorWardsPlaced", 0),
+                "detectorWardsOpponent": opponent.get("detectorWardsPlaced", 0) if opponent else 0,
                 "stealthWards": participant.get("stealthWardsPlaced", 0),
-                "wardsKilled": c.get("wardTakedowns", 0),
-                "wardsKilledBefore20": c.get("wardTakedownsBefore20M", 0)
+                "stealthWardsOpponent": opponent.get("stealthWardsPlaced", 0) if opponent else 0,
+                "wardsKilled": participant.get("wardsKilled", 0),
+                "wardsKilledOpponent": opponent.get("wardsKilled", 0) if opponent else 0,
+                "wardsKilledBefore20": c.get("wardTakedownsBefore20M", 0),
+                "wardsKilledBefore20Opponent": o_c.get("wardTakedownsBefore20M", 0) if opponent else 0,
             }
         }
 
+        # Pour l'instant, on fixe la data radar en dur ou vide le temps de l'implémenter plus tard
+        radar_data = []
+
         return {
-            "metadata": {"role": "JUNGLE"},
+            "metadata": {"role": "JUNGLE", "archetype": archetype},
             "radar_data": radar_data,
-            "insights": insights,
+            "insights": [],
             "tabs_data": tabs_data
         }

@@ -245,6 +245,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                             puuid={playerPuuid}
                             role={currentPlayer.teamPosition}
                             isTimelineLoading={isTimelineLoading}
+                            versionDDragon={versionDDragon} // <-- AJOUT ICI
                         />
                     )}
 

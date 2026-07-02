@@ -276,3 +276,19 @@ Les graphiques temporels (Recharts) ont été dotés de comportements personnali
 *   **Routage Visuel (`SupportCombatView.jsx`) :** Transformation du composant en routeur de rendu conditionnel basé sur `data.archetype`. 
     *   Implémentation de la vue experte Vanguard traduisant les concepts techniques (Mitigation, Aides létales sous contrôle) en interfaces claires pour l'utilisateur.
     *   Refonte complète du code pour consommer le nouveau composant `StatCard`, assurant la standardisation de l'affichage.
+
+
+## 10. Pivot Architectural : Configuration-Driven UI & Inversion de Contrôle
+
+Pour pallier l'explosion combinatoire du code liée à la multiplication des rôles et archétypes (fichiers redondants documentés en Section 9), l'application a subi une refonte complète de ses couches d'affichage et d'extraction de données.
+
+### 10.1. Frontend : Configuration-Driven UI
+L'approche des "Vues Hardcodées" (ex: `SupportCombatView.jsx`, `JungleResourcesView.jsx`) est totalement abandonnée. L'interface est désormais pilotée par la donnée via trois couches strictes :
+* **Le Dictionnaire (`roleLayouts.js`) :** Configuration JSON statique définissant l'agencement visuel complet (grilles, colonnes, widgets) et le mapping des clés de données backend pour chaque rôle et archétype. L'ajout d'une nouvelle analyse ne requiert plus de code React.
+* **L'Usine à Vues (`DynamicExpertView.jsx`) :** Moteur de rendu aveugle. Il itère sur le dictionnaire, résout les chemins de données imbriqués, applique des multiplicateurs mathématiques (ex: pour les pourcentages) et instancie dynamiquement les composants de l'UI Kit.
+* **Primitives Intelligentes (`AdvancedTimelineChart.jsx`) :** Les graphiques sont abstraits. Le composant gère mathématiquement la connexion des valeurs nulles (trendlines) et utilise des sous-composants conditionnels (`ConditionalEventDot`) pour éliminer les artefacts visuels sur les courbes cumulées (un marqueur n'est dessiné que si la valeur a évolué).
+
+### 10.2. Backend : Inversion de Contrôle (IoC)
+La dette technique liée à la duplication des algorithmes de parcours temporel (timeline) dans les analyseurs enfants a été éradiquée via le pattern *Template Method / Dependency Injection*.
+* **Moteur Parent (`BaseRoleAnalyzer`) :** Centralise la logique lourde. Il gère le cache Data Dragon et exécute la boucle de parcours des frames de la timeline (`_extract_timeline_data`).
+* **Injection par Lambda (`support_analyzer.py`, `jungle_analyzer.py`) :** Les classes enfants ne contiennent plus de logique structurelle. Elles délèguent le traitement au parent en lui injectant simplement une fonction lambda (Extracteur) dictant quelle métrique précise doit être récupérée à l'instant T (ex: `totalDamageTaken` pour un Vanguard, `totalDamageDoneToChampions` pour une Artillery).
