@@ -5,12 +5,15 @@
  *
  * DESCRIPTION :
  * Composant racine de l'application.
- * Gère le routage par état entre les différentes vues analytiques (Historique, 
- * Synergies) et orchestre le cycle de vie des données.
+ * Transformé pour supporter le routage sémantique via react-router-dom.
+ * L'URL agit comme la Source Unique de Vérité (Single Source of Truth). Toute
+ * modification de vue ou recherche de joueur met à jour l'URL, qui déclenche
+ * en retour le cycle de vie des données (téléchargement, polling ARQ, rendu).
  * ============================================================================
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import SearchBar from './components/SearchBar.jsx';
 import ViewSelector from './components/ViewSelector.jsx';
@@ -20,8 +23,12 @@ import FilterBar from './components/FilterBar.jsx';
 import MatchList from './components/history/MatchList.jsx';
 import SynergiesMatchupsWrapper from './components/synergies/SynergiesMatchupsWrapper.jsx';
 import ChatView from './components/chat/ChatView.jsx';
+import { addProfileToHistory } from './services/historyService.js';
 
 function App() {
+  const { view: urlView, server: urlServer, riotId: urlRiotId } = useParams();
+  const navigate = useNavigate();
+
   const [currentPuuid, setCurrentPuuid] = useState(null);
   const [currentServer, setCurrentServer] = useState('EUW');
   const [playerSummary, setPlayerSummary] = useState(null);
@@ -60,6 +67,49 @@ function App() {
     initDataDragon();
   }, []);
 
+  /**
+   * Synchronise l'état de la vue applicative avec le paramètre de l'URL.
+   * Si l'URL change manuellement (ex: par l'utilisateur), l'application s'adapte.
+   */
+  useEffect(() => {
+    if (urlView) {
+      const upperView = urlView.toUpperCase();
+      if (upperView !== currentMainView) {
+        setCurrentMainView(upperView);
+      }
+    }
+  }, [urlView]);
+
+  /**
+   * Intercepte les modifications des paramètres d'URL concernant le joueur.
+   * Procède au découpage du Riot ID sécurisé et déclenche le processus d'ingestion
+   * si le joueur ciblé diffère du joueur actuellement en mémoire.
+   */
+  useEffect(() => {
+    if (urlServer && urlRiotId) {
+      const lastDashIndex = urlRiotId.lastIndexOf('-');
+      if (lastDashIndex === -1) {
+        setErrorMsg("Format d'URL invalide. Utilisez Pseudo-Tag.");
+        return;
+      }
+
+      const gameName = urlRiotId.substring(0, lastDashIndex);
+      const tagLine = urlRiotId.substring(lastDashIndex + 1);
+
+      // Verrou préventif pour éviter une boucle de re-téléchargement si l'URL
+      // correspond au joueur déjà affiché (ex: changement de vue uniquement).
+      if (playerSummary &&
+        playerSummary.riotIdGameName.toLowerCase() === gameName.toLowerCase() &&
+        playerSummary.riotIdTagline.toLowerCase() === tagLine.toLowerCase() &&
+        currentServer.toLowerCase() === urlServer.toLowerCase()) {
+        return;
+      }
+
+      handleSearch(urlServer, gameName, tagLine);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlServer, urlRiotId]);
+
   const handleSearch = async (server, gameName, tagLine) => {
     setIsSyncing(true);
     setErrorMsg(null);
@@ -79,6 +129,9 @@ function App() {
 
       const summaryRes = await axios.get(`http://localhost:8000/api/v1/players/${puuid}/summary`);
       setPlayerSummary(summaryRes.data);
+
+      // Le profil est valide et récupéré, on l'ajoute à la mémoire locale de navigation
+      addProfileToHistory(server, gameName, tagLine);
 
       setIsPollingBackground(true);
       setIsInitialLoading(true);
@@ -180,22 +233,27 @@ function App() {
   }, [playerSummary, currentServer, isSyncing]);
 
   const handleViewChange = (newView) => {
+    if (!playerSummary) return;
+
     if (newView === 'HISTORIQUE') {
-      // Réinitialisation des filtres lors du retour à l'historique
       setLaneFilter('ALL');
       setPatchFilter('ALL');
     } else if (newView === 'SYNERGIES' && laneFilter === 'ALL') {
       const defaultLane = playerSummary?.preferredLane || 'JUNGLE';
       setLaneFilter(defaultLane);
     }
-    setCurrentMainView(newView);
+
+    // Au lieu de changer l'état local, on modifie la barre d'adresse
+    // Le useEffect capturera ce changement et mettra à jour l'état en conséquence
+    const safeRiotId = `${playerSummary.riotIdGameName}-${playerSummary.riotIdTagline}`;
+    navigate(`/${newView.toLowerCase()}/${currentServer.toLowerCase()}/${safeRiotId}`);
   };
 
   return (
     <div className="h-screen p-6 overflow-hidden flex flex-col">
       <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1 min-h-0">
 
-        <SearchBar onSearch={handleSearch} isSyncing={isSyncing} />
+        <SearchBar isSyncing={isSyncing} />
 
         {errorMsg && (
           <div className="bg-surface-solid border border-lol-loss text-red-200 p-4 rounded-lg shrink-0">
@@ -213,7 +271,6 @@ function App() {
         {currentPuuid && playerSummary && (
           <div className="flex gap-6 items-start flex-1 min-h-0">
 
-            {/* Sidebar : max-h-full au lieu de h-full permet à la barre de rétrécir si peu de contenu */}
             <div className="w-80 shrink-0 flex flex-col gap-6 max-h-full">
               <PlayerStatCard
                 summary={playerSummary}
@@ -222,7 +279,6 @@ function App() {
                 versionDDragon={versionDDragon}
               />
 
-              {/* Conteneur des champions : suppression du flex-1 forcé, il respecte maintenant sa taille de contenu, tout en scrollant si nécessaire via min-h-0 */}
               <div className="glass-panel p-3 flex flex-col min-h-0 overflow-hidden">
                 <h3 className="text-gray-100 font-bold mb-3 text-sm uppercase tracking-wider text-center border-b border-border-glass pb-2 shrink-0">
                   Champions Joués
@@ -275,7 +331,8 @@ function App() {
                   versionDDragon={versionDDragon}
                   championMap={championMap}
                   currentServer={currentServer}
-                  onPlayerSearch={handleSearch}
+                  // L'appui sur le joueur dans la liste déclenche désormais une navigation sémantique
+                  onPlayerSearch={(s, g, t) => navigate(`/historique/${s.toLowerCase()}/${g}-${t}`)}
                   isInitialLoading={isInitialLoading}
                   refreshTrigger={refreshTrigger}
                 />

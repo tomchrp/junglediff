@@ -5,10 +5,16 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Définition du schéma relationnel de la base de données via SQLAlchemy.
-Inclut les métadonnées globales des joueurs (icône, rang, LP récupérés via 
-Summoner V4 et League V4) et le stockage des données hybrides pour les matchs
-(données chaudes indexées pour les requêtes rapides, et JSONB trimmé pour le 
-stockage à froid et les futures analyses).
+Inclut les métadonnées globales des joueurs, le stockage hybride des matchs,
+et les nouvelles tables de persistance pour l'orchestration du Crawler Big Data.
+
+MODIFICATIONS :
+- Ajout de la colonne `is_crawled` dans la table Match pour empêcher
+  le téléchargement automatisé des timelines sur les données massives.
+- Création de `CrawlerQueue` : File d'attente des joueurs à explorer (Snowball).
+- Création de `CrawlerMatchQueue` : File d'attente des matchs à télécharger.
+- Création de `CrawlerState` : Singleton pour le pilotage (Start/Stop) et 
+  le monitoring en temps réel.
 ===============================================================================
 """
 
@@ -17,6 +23,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+# =============================================================================
+# MODÈLES DE DONNÉES APPLICATIFS (JOUABILITÉ ET ANALYSE)
+# =============================================================================
 
 class Player(Base):
     """
@@ -31,21 +41,24 @@ class Player(Base):
     riot_id_name = Column(String, nullable=False)
     riot_id_tagline = Column(String, nullable=False)
     
-    # Statistiques de profil (PlayerStatCard)
+    # Statistiques de profil
     profile_icon_id = Column(Integer, nullable=True)
     summoner_level = Column(Integer, nullable=True)
-    tier = Column(String, nullable=True) # Ex: DIAMOND
-    rank = Column(String, nullable=True) # Ex: II
+    tier = Column(String, nullable=True)
+    rank = Column(String, nullable=True)
     league_points = Column(Integer, nullable=True)
     
     last_update_timestamp = Column(BigInteger, nullable=True)
     
-    # Relation
     match_participations = relationship("MatchParticipant", back_populates="player")
 
 
 class Match(Base):
-    """Table stockant les métadonnées de la partie et le JSON élagué."""
+    """
+    Table stockant les métadonnées de la partie et le JSON élagué.
+    Le flag `is_crawled` agit comme un coupe-circuit strict pour empêcher
+    les workers ARQ de saturer l'API Riot en tentant de télécharger la timeline.
+    """
     __tablename__ = "matches"
 
     match_id = Column(String, primary_key=True, index=True)
@@ -53,7 +66,10 @@ class Match(Base):
     game_duration = Column(Integer, nullable=False)
     creation_timestamp = Column(BigInteger, nullable=False)
     
-    # Données froides TRIMMÉES (très légères par rapport au payload Riot brut)
+    # FLAG DE SÉCURITÉ BIG DATA
+    is_crawled = Column(Boolean, nullable=False, server_default='false', default=False)
+    
+    # Données froides TRIMMÉES
     raw_match_data = Column(JSONB, nullable=False)
 
     participants = relationship("MatchParticipant", back_populates="match")
@@ -61,7 +77,7 @@ class Match(Base):
 
 
 class MatchParticipant(Base):
-    """Table de liaison. Indexée pour les calculs d'agrégation de la Sidebar."""
+    """Table de liaison. Indexée pour les calculs d'agrégation de la Sidebar et Synergies."""
     __tablename__ = "match_participants"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -94,3 +110,48 @@ class MatchTimeline(Base):
     raw_timeline_data = Column(JSONB, nullable=False)
 
     match = relationship("Match", back_populates="timeline")
+
+
+# =============================================================================
+# MODÈLES D'ÉTAT DU CRAWLER BIG DATA
+# =============================================================================
+
+class CrawlerQueue(Base):
+    """
+    File d'attente persistante des joueurs découverts.
+    Gère la propagation en largeur (Snowballing) avec une limite de profondeur.
+    """
+    __tablename__ = "crawler_queue"
+    
+    puuid = Column(String, primary_key=True, index=True)
+    status = Column(String, nullable=False, default="PENDING", index=True) # PENDING, PROCESSING, COMPLETED, FAILED
+    discovery_depth = Column(Integer, nullable=False, default=0)
+    discovered_at = Column(BigInteger, nullable=False)
+
+
+class CrawlerMatchQueue(Base):
+    """
+    File d'attente persistante des Matchs identifiés à télécharger.
+    Permet de résister aux coupures brutales de l'application.
+    """
+    __tablename__ = "crawler_match_queue"
+    
+    match_id = Column(String, primary_key=True, index=True)
+    status = Column(String, nullable=False, default="PENDING", index=True) # PENDING, PROCESSING, COMPLETED, FAILED
+    discovered_at = Column(BigInteger, nullable=False)
+
+
+class CrawlerState(Base):
+    """
+    Table de type Singleton (Une seule ligne, id=1).
+    Sert de panneau de contrôle central pour allumer/éteindre le crawler depuis
+    le frontend, et de registre pour calculer la vitesse d'ingestion.
+    """
+    __tablename__ = "crawler_state"
+    
+    id = Column(Integer, primary_key=True) # Toujours 1
+    is_active = Column(Boolean, nullable=False, default=False)
+    extraction_only = Column(Boolean, nullable=False, default=False) # NOUVEL INTERRUPTEUR
+    total_requests_made = Column(Integer, nullable=False, default=0)
+    current_rate_limit_sleep = Column(Integer, nullable=False, default=0)
+    started_at = Column(BigInteger, nullable=True)

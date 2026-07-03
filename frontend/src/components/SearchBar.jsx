@@ -4,41 +4,58 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Composant de recherche global. Utilise un champ unique pour le Riot ID 
- * complet (Format: Pseudo#Tag). Gère la validation et le découpage avant de 
- * transmettre les données au composant parent.
- * * DESIGN SYSTEM : Le conteneur principal devient un glass-panel. Les champs 
- * de saisie exploitent bg-surface-solid pour se détacher du fond sans opacité.
- * Le bouton d'action utilise bg-lol-gold avec un texte contrasté bg-app.
+ * Composant de recherche global avec historique intégré.
+ * Intercepte la saisie du Riot ID, gère l'affichage du menu déroulant 
+ * contenant les profils récents (localStorage) et déclenche la navigation 
+ * web via React Router au lieu d'appeler directement l'API.
  * ============================================================================
  */
 
-import React, { useState } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Loader2, X, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getRecentProfiles, removeProfileFromHistory } from '../services/historyService.js';
 
-const SearchBar = ({ onSearch, isSyncing }) => {
+const SearchBar = ({ isSyncing }) => {
     const [server, setServer] = useState('EUW');
     const [riotId, setRiotId] = useState('');
     const [localError, setLocalError] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [recentProfiles, setRecentProfiles] = useState([]);
+
+    const navigate = useNavigate();
+    const containerRef = useRef(null);
+
+    // Charge les profils au montage du composant
+    useEffect(() => {
+        setRecentProfiles(getRecentProfiles());
+    }, [showDropdown]); // Rafraîchit la liste à chaque ouverture
+
+    // Gestion du clic en dehors du composant pour fermer le menu déroulant
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     /**
-     * Intercepte la soumission du formulaire, valide la présence du séparateur '#',
-     * et sépare le Riot ID complet en gameName et tagLine.
-     * Affiche une erreur sémantique si le format est invalide.
-     * 
-     * @param {Event} e - L'événement de soumission du formulaire
+     * Intercepte la soumission, valide le format et pousse la nouvelle URL.
+     * Le backend n'est pas appelé ici. C'est le changement d'URL qui 
+     * déclenchera l'analyse dans App.jsx.
      */
     const handleSubmit = (e) => {
         e.preventDefault();
         setLocalError('');
 
-        // Validation stricte du format attendu
         if (!riotId.includes('#')) {
-            setLocalError("Le format doit inclure un hashtag (ex: KC NEXT AD KING#EUW)");
+            setLocalError("Le format doit inclure un hashtag (ex: Faker#T1)");
             return;
         }
 
-        // Découpage par la dernière occurrence de # au cas où le pseudo en contiendrait un
         const lastHashIndex = riotId.lastIndexOf('#');
         const gameName = riotId.substring(0, lastHashIndex).trim();
         const tagLine = riotId.substring(lastHashIndex + 1).trim();
@@ -48,12 +65,27 @@ const SearchBar = ({ onSearch, isSyncing }) => {
             return;
         }
 
-        onSearch(server, gameName, tagLine);
+        setShowDropdown(false);
+        // Navigation sémantique par défaut vers l'historique lors d'une nouvelle recherche
+        navigate(`/historique/${server.toLowerCase()}/${gameName}-${tagLine}`);
+    };
+
+    const handleProfileClick = (profile) => {
+        setShowDropdown(false);
+        setRiotId(`${profile.gameName}#${profile.tagLine}`);
+        setServer(profile.server.toUpperCase());
+        navigate(`/historique/${profile.server.toLowerCase()}/${profile.gameName}-${profile.tagLine}`);
+    };
+
+    const handleDeleteProfile = (e, id) => {
+        e.stopPropagation(); // Empêche le clic de déclencher la navigation
+        removeProfileFromHistory(id);
+        setRecentProfiles(getRecentProfiles());
     };
 
     return (
-        <div className="glass-panel p-4 mb-8">
-            <form onSubmit={handleSubmit} className="flex flex-wrap md:flex-nowrap gap-3 items-center">
+        <div className="glass-panel p-4 mb-8 relative z-50" ref={containerRef}>
+            <form onSubmit={handleSubmit} className="flex flex-wrap md:flex-nowrap gap-3 items-center relative">
 
                 <select
                     value={server}
@@ -72,11 +104,46 @@ const SearchBar = ({ onSearch, isSyncing }) => {
                         placeholder="Riot ID complet (ex: Faker#T1)"
                         value={riotId}
                         onChange={(e) => setRiotId(e.target.value)}
+                        onFocus={() => setShowDropdown(true)}
                         disabled={isSyncing}
-                        className={`w-full bg-surface-solid text-gray-100 px-4 py-2 outline-none border rounded-md disabled:opacity-50 transition-colors ${localError ? 'border-lol-loss focus:border-lol-loss' : 'border-border-strong focus:border-lol-gold'
-                            }`}
+                        className={`w-full bg-surface-solid text-gray-100 px-4 py-2 outline-none border rounded-md disabled:opacity-50 transition-colors ${localError ? 'border-lol-loss focus:border-lol-loss' : 'border-border-strong focus:border-lol-gold'}`}
                         required
                     />
+
+                    {/* Menu déroulant de l'historique */}
+                    {showDropdown && recentProfiles.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-surface-elevated border border-border-glass rounded-md shadow-lg overflow-hidden flex flex-col">
+                            <div className="px-4 py-2 bg-surface-solid border-b border-border-glass text-xs font-bold text-lol-textMuted uppercase tracking-wider flex items-center gap-2">
+                                <Clock className="w-4 h-4" />
+                                Profils récents
+                            </div>
+                            {recentProfiles.map(profile => (
+                                <div
+                                    key={profile.id}
+                                    onClick={() => handleProfileClick(profile)}
+                                    className="flex items-center justify-between px-4 py-3 hover:bg-surface-solid cursor-pointer transition-colors group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs font-bold bg-app px-2 py-1 rounded text-lol-gold border border-lol-gold/20">
+                                            {profile.server.toUpperCase()}
+                                        </span>
+                                        <span className="text-gray-100 font-medium">
+                                            {profile.gameName}
+                                            <span className="text-lol-textMuted">#{profile.tagLine}</span>
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteProfile(e, profile.id)}
+                                        className="text-lol-textMuted hover:text-lol-loss opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                        title="Retirer de l'historique"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <button

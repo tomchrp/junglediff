@@ -94,7 +94,7 @@ const MatchCardSummary = ({ team100, team200, playerPuuid, versionDDragon, champ
                 {/* 2. Bloc KDA & KP% */}
                 <div className="w-[60px] flex flex-col items-center justify-center shrink-0">
                     <div className="text-[11px] font-bold text-gray-200">
-                        {p.kills}/<span className="text-lol-loss">{p.deaths}</span>/{p.assists}
+                        {p.kills} / <span className="text-lol-loss">{p.deaths}</span> / {p.assists}
                     </div>
                     <div className="text-[9px] text-lol-textMuted mt-[1px]">{totalCS} cs ({csMin})</div>
                     <div className="text-[10px] font-medium text-lol-textMuted mt-0.5">{kp}% KP</div>
