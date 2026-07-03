@@ -2,35 +2,71 @@
 ===============================================================================
 FICHIER : backend/app/services/analysis/modules/combat/artillery_combat.py
 PROJET  : JungleDiff
-
-DESCRIPTION :
-Module expert gérant l'extraction des statistiques de combat pour l'archétype 
-ARTILLERY (Support Poke). Isole la logique de pression offensive, de précision 
-des skillshots et de survie à distance. Hérite de BaseRoleAnalyzer.
 ===============================================================================
 """
 
 from typing import Dict, Any
-from app.services.analysis.base_analyzer import BaseRoleAnalyzer
+from app.services.analysis.modules.base_module import BaseMetricModule
 
-class ArtilleryCombatModule(BaseRoleAnalyzer):
+class ArtilleryCombatModule(BaseMetricModule):
 
-    def analyze(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
-        pass
+    def _process_damage_timeline(self, participant_id: int, timeline_data: Dict[str, Any]) -> list:
+        graph = []
+        if timeline_data and "info" in timeline_data:
+            frames = timeline_data["info"].get("frames", [])
+            for frame in frames:
+                ts = frame.get("timestamp", 0)
+                
+                # Récupération ultra-sécurisée des dégâts (évite les KeyError silencieuses)
+                participant_frames = frame.get("participantFrames", {})
+                p_frame = participant_frames.get(str(participant_id), {})
+                damage_stats = p_frame.get("damageStats", {})
+                dmg = damage_stats.get("totalDamageDoneToChampions", 0)
+                
+                # Récupération des achats
+                item_ids = []
+                for event in frame.get("events", []):
+                    if event.get("type") == "ITEM_PURCHASED" and event.get("participantId") == participant_id:
+                        item_ids.append(event.get("itemId"))
+                        
+                graph.append({
+                    "timestamp": ts,
+                    "totalDamage": dmg,
+                    "itemIds": item_ids
+                })
+        return graph
+
+    def _calculate_spell_efficiency(self, participant: Dict[str, Any], challenges: Dict[str, Any]) -> Dict[str, Any]:
+        spell1 = participant.get("spell1Casts", 0)
+        spell2 = participant.get("spell2Casts", 0)
+        spell3 = participant.get("spell3Casts", 0)
+        spell4 = participant.get("spell4Casts", 0)
+        
+        total_spells_cast = spell1 + spell2 + spell3 + spell4
+        skillshots_hit = challenges.get("skillshotsHit", 0)
+        
+        spell_hit_ratio = 0
+        if total_spells_cast > 0:
+            raw_ratio = (skillshots_hit / total_spells_cast) * 100
+            spell_hit_ratio = round(min(raw_ratio, 100.0), 1)
+            
+        return {
+            "totalSpellsCast": total_spells_cast,
+            "spellHitRatio": spell_hit_ratio,
+            "skillshotsHit": skillshots_hit,
+            "skillshotsDodged": challenges.get("skillshotsDodged", 0)
+        }
 
     def compute(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Agrège les métriques offensives et génère le graphe temporel de dégâts.
-        
-        Logique métier :
-        Utilise une fonction lambda injectée dans le moteur de timeline parent 
-        pour extraire spécifiquement la valeur 'totalDamageDoneToChampions'.
-        """
         c = participant.get("challenges", {})
         o_c = opponent.get("challenges", {}) if opponent else {}
+        participant_id = participant.get("participantId")
         
-        extract_damage_fn = lambda p: {"totalDamage": p.get("damageStats", {}).get("totalDamageDoneToChampions", 0)}
-        timeline_combat = self._extract_timeline_data(participant.get("participantId"), timeline_data, extract_damage_fn)
+        spell_efficiency = self._calculate_spell_efficiency(participant, c)
+        spell_efficiency_opp = self._calculate_spell_efficiency(opponent, o_c) if opponent else {}
+        
+        # Extraction du graphique
+        damage_graph = self._process_damage_timeline(participant_id, timeline_data)
         
         return {
             "damageToChampions": participant.get("totalDamageDealtToChampions", 0),
@@ -41,15 +77,25 @@ class ArtilleryCombatModule(BaseRoleAnalyzer):
             "teamDamagePercentageOpponent": o_c.get("teamDamagePercentage", 0) if opponent else 0,
             "killParticipation": c.get("killParticipation", 0),
             "killParticipationOpponent": o_c.get("killParticipation", 0) if opponent else 0,
+            
+            "totalSpellsCast": spell_efficiency.get("totalSpellsCast", 0),
+            "totalSpellsCastOpponent": spell_efficiency_opp.get("totalSpellsCast", 0) if opponent else 0,
+            "spellHitRatio": spell_efficiency.get("spellHitRatio", 0),
+            "spellHitRatioOpponent": spell_efficiency_opp.get("spellHitRatio", 0) if opponent else 0,
+            "skillshotsHit": spell_efficiency.get("skillshotsHit", 0),
+            "skillshotsHitOpponent": spell_efficiency_opp.get("skillshotsHit", 0) if opponent else 0,
+            "skillshotsDodged": spell_efficiency.get("skillshotsDodged", 0),
+            "skillshotsDodgedOpponent": spell_efficiency_opp.get("skillshotsDodged", 0) if opponent else 0,
             "landSkillShotsEarlyGame": c.get("landSkillShotsEarlyGame", 0),
             "landSkillShotsEarlyGameOpponent": o_c.get("landSkillShotsEarlyGame", 0) if opponent else 0,
-            "skillshotsHit": c.get("skillshotsHit", 0),
-            "skillshotsHitOpponent": o_c.get("skillshotsHit", 0) if opponent else 0,
-            "skillshotsDodged": c.get("skillshotsDodged", 0),
-            "skillshotsDodgedOpponent": o_c.get("skillshotsDodged", 0) if opponent else 0,
-            "magicDamageDealtToChampions": participant.get("magicDamageDealtToChampions", 0),
-            "magicDamageDealtToChampionsOpponent": opponent.get("magicDamageDealtToChampions", 0) if opponent else 0,
-            "longestTimeSpentLiving": participant.get("longestTimeSpentLiving", 0),
-            "longestTimeSpentLivingOpponent": opponent.get("longestTimeSpentLiving", 0) if opponent else 0,
-            "timelineGraph": timeline_combat
+            
+            "tookLargeDamageSurvived": c.get("tookLargeDamageSurvived", 0),
+            "tookLargeDamageSurvivedOpponent": o_c.get("tookLargeDamageSurvived", 0) if opponent else 0,
+            "longestTimeSpentLiving": c.get("longestTimeSpentLiving", 0),
+            "longestTimeSpentLivingOpponent": o_c.get("longestTimeSpentLiving", 0) if opponent else 0,
+            
+            # 4. Graphe de Combat (C'est cette clé que le front attend !)
+            "timelineGraph": {
+                "damage_graph": damage_graph
+            }
         }

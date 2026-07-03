@@ -10,6 +10,8 @@ de vision (Brouilleur Optique), le contrôle territorial (Rivière/Invade) et
 la sécurisation des monstres épiques (Blackout).
 
 MODIFICATIONS :
+- Remplacement de la clé 'pinkWardsBought' par 'controlWardsBought' pour 
+  standardisation avec le frontend et les autres rôles.
 - Ajout des clés visionScore et visionScoreOpponent manquantes.
 - Correction du chemin d'accès pour stealthWardsPlaced (via 'challenges').
 ===============================================================================
@@ -116,8 +118,8 @@ class JungleVisionModule(BaseMetricModule):
             "wardTakedownsBefore20MOpponent": o_c.get("wardTakedownsBefore20M", 0) if opponent else 0,
             "twoWardsOneSweeperCount": c.get("twoWardsOneSweeperCount", 0),
             "twoWardsOneSweeperCountOpponent": o_c.get("twoWardsOneSweeperCount", 0) if opponent else 0,
-            "pinkWardsBought": participant.get("visionWardsBoughtInGame", 0),
-            "pinkWardsBoughtOpponent": opponent.get("visionWardsBoughtInGame", 0) if opponent else 0,
+            "controlWardsBought": participant.get("visionWardsBoughtInGame", 0),
+            "controlWardsBoughtOpponent": opponent.get("visionWardsBoughtInGame", 0) if opponent else 0,
             "stealthWardsPlaced": c.get("stealthWardsPlaced", 0),
             "stealthWardsPlacedOpponent": o_c.get("stealthWardsPlaced", 0) if opponent else 0,
             "detectorWardsPlaced": participant.get("detectorWardsPlaced", 0),

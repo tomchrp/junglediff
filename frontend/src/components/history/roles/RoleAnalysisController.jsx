@@ -5,16 +5,9 @@
  *
  * DESCRIPTION :
  * Orchestrateur hybride pour l'analyse des rôles.
- * 100% piloté par la configuration (Configuration-Driven UI).
- * Il n'y a plus aucun import de vues expertes codées en dur.
- * 
- * MODIFICATIONS RÉCENTES :
- * - Correction du contrat de données : les onglets sont extraits directement
- *   à la racine de analysisData via l'opérateur rest.
- * - Implémentation d'un Early Return strict ("Bouclier") qui empêche le crash
- *   du composant si un archétype n'est pas encore enregistré dans le registre.
- * - Intégration de l'évaluation `isArchetypeMismatch` transmise au moteur 
- *   pour censurer les comparaisons de statistiques asymétriques.
+ * * MODIFICATION : Aplatissement global des données des onglets.
+ * Permet aux vues expertes (ex: Objectifs) d'accéder aux métriques pré-calculées 
+ * par d'autres vues (ex: Vision) sans être bloquées par des silos de données.
  * ============================================================================
  */
 
@@ -24,7 +17,6 @@ import RoleAnalysisDashboard from './shared/RoleAnalysisDashboard.jsx';
 import DynamicExpertView from './shared/DynamicExpertView.jsx';
 import { roleLayouts } from '../../../core/configs/layouts/index.js';
 
-// Dictionnaire de traduction des identifiants d'onglets pour l'interface utilisateur
 const TAB_LABELS = {
     vision: 'Vision',
     combat: 'Combat',
@@ -37,15 +29,6 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    /**
-     * useEffect - fetchAnalysis
-     * 
-     * DESCRIPTION :
-     * Gère la récupération asynchrone des données d'analyse experte depuis l'API.
-     * Implémente un mécanisme de polling (requêtes répétées) toutes les 3 secondes
-     * si le backend indique que les données ne sont pas encore prêtes. 
-     * Utilise AbortController pour annuler la requête si le composant est démonté.
-     */
     useEffect(() => {
         let pollingInterval;
         const abortController = new AbortController();
@@ -58,7 +41,6 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
                 );
 
                 if (response.data.status === 'ready' || response.data.metadata) {
-                    // Si l'orchestrateur renvoie directement les données (sans worker), metadata est présent
                     setAnalysisData(response.data.data || response.data);
                     setIsLoading(false);
                     if (pollingInterval) clearInterval(pollingInterval);
@@ -74,7 +56,6 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
 
         if (!isTimelineLoading) {
             fetchAnalysis();
-            // Le polling peut être retiré à terme si le traitement est 100% synchrone
             pollingInterval = setInterval(fetchAnalysis, 3000);
         }
 
@@ -95,11 +76,9 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
 
     if (error) return <div className="p-4 text-center text-lol-loss text-sm font-bold">{error}</div>;
 
-    // Extraction dynamique : tabsData regroupe toutes les clés (vision, combat, etc.) qui ne sont pas explicitement nommées
     const { metadata, radar_data, insights, ...tabsData } = analysisData;
     const currentRoleLayout = roleLayouts[metadata.role]?.[metadata.archetype];
 
-    // Sécurité (Early Return) : Si l'archétype est inconnu ou en cours de dev, on stoppe le rendu ici
     if (!currentRoleLayout) {
         return (
             <div className="flex flex-col gap-4 p-2">
@@ -118,19 +97,21 @@ const RoleAnalysisController = ({ matchId, puuid, role, isTimelineLoading, versi
         );
     }
 
-    // Détection du conflit d'archétype sur la lane pour la censure des Deltas
     const isArchetypeMismatch = metadata.opponentArchetype
         ? metadata.archetype !== metadata.opponentArchetype
         : false;
 
-    // Mapping du layout de l'archétype sur le composant DynamicExpertView
+    // --- CORRECTION : FUSION GLOBALE (FLATTEN) ---
+    // On rassemble tous les dictionnaires (vision, combat, objectifs...) en un seul super-objet.
+    const globalUnifiedData = Object.values(tabsData).reduce((acc, tab) => ({ ...acc, ...tab }), {});
+
     const tabsConfig = Object.keys(currentRoleLayout).map(tabKey => ({
         id: tabKey,
         label: TAB_LABELS[tabKey] || tabKey.toUpperCase(),
         content: (
             <DynamicExpertView
                 layout={currentRoleLayout[tabKey]}
-                data={tabsData[tabKey]}
+                data={globalUnifiedData} // <-- La vue reçoit désormais TOUTES les données pré-calculées
                 versionDDragon={versionDDragon}
                 isMismatch={isArchetypeMismatch}
             />

@@ -1,45 +1,29 @@
 /**
  * ============================================================================
- * FICHIER : frontend/src/core/configs/layouts/shared/jungleVisionLayouts.js
+ * FICHIER : frontend/src/core/configs/layouts/shared/denialVisionLayouts.js
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
  * Configuration visuelle partagée pour l'onglet Vision du rôle Jungle.
- * Oriente l'analyse sur le déni de vision, l'utilisation du Brouilleur 
- * Optique (Sweeper) et le contrôle territorial avant les objectifs.
+ * Refactorisée (Phase 3) : Utilise le metricsRegistry pour s'aligner sur la 
+ * nomenclature officielle, éradiquant les dérives textuelles avec le Support.
  * ============================================================================
  */
+
+import { METRICS, TIMELINE_SERIES } from '../../metricsRegistry';
 
 export const jungleVisionLayout = [
     {
         type: 'grid',
         cols: 3,
         items: [
-            {
-                widget: 'StatCardMain',
-                title: 'Score Global',
-                mainValueKey: 'visionScore',
-                mainFormat: 'number',
-                footerLabel: 'Ratio / min :',
-                footerValueKey: 'visionScorePerMinute',
-                footerFormat: 'number_one_decimal',
-                bottomText: 'Impact brut de la vision' // Harmonisé avec le Support
-            },
-            {
-                widget: 'CircularGauge',
-                label: 'Contrôle Rivière & Invade',
-                valueKey: 'controlWardCoverage',
-                color: 'text-lol-info'
-            },
+            { metric: METRICS.VISION_SCORE },
+            { metric: METRICS.VISION_PENETRATION }, // Standardisé : le texte "Contrôle Rivière & Invade" disparaît au profit de la norme
             {
                 widget: 'StatCardDouble',
                 title: 'Efficacité du Brouilleur',
-                row1Label: 'Wards détruites (<20m)',
-                row1ValueKey: 'wardTakedownsBefore20M',
-                row1Color: 'text-lol-info',
-                row2Label: 'Sweeper rentabilisé (2+ wards)',
-                row2ValueKey: 'twoWardsOneSweeperCount',
-                row2Color: 'text-lol-gold'
+                row1Metric: METRICS.SWEEPER_TAKEDOWNS_EARLY,
+                row2Metric: METRICS.SWEEPER_RENTABILITY
             }
         ]
     },
@@ -52,8 +36,8 @@ export const jungleVisionLayout = [
                 dataKey: 'timelineGraph.events',
                 xAxisKey: 'timestamp',
                 lines: [
-                    { dataKey: 'playerWardsKilled', name: 'Nettoyage (Moi)', color: '#0ea5e9', strokeWidth: 2, showDots: true },
-                    { dataKey: 'oppWardsKilled', name: 'Nettoyage (Adv)', color: '#ef4444', strokeWidth: 2, isDashed: true, showDots: true }
+                    { metric: TIMELINE_SERIES.PLAYER_SWEEPING },
+                    { metric: TIMELINE_SERIES.OPP_SWEEPING }
                 ]
             }
         ]
@@ -66,19 +50,12 @@ export const jungleVisionLayout = [
                 widget: 'StatCardList',
                 title: "L'Arsenal du Jungler",
                 listItems: [
-                    { label: 'Pinks achetées', valueKey: 'pinkWardsBought', color: 'text-pink-400' },
-                    { label: 'Balises jaunes posées', valueKey: 'stealthWardsPlaced', color: 'text-gray-100' },
-                    { label: 'Total détruit', valueKey: 'wardsKilled', color: 'text-gray-100' }
+                    { metric: METRICS.CONTROL_WARDS_BOUGHT }, // S'aligne avec la modification backend faite en Phase 1.5
+                    { metric: METRICS.STEALTH_WARDS_PLACED },
+                    { metric: METRICS.WARDS_KILLED } // S'aligne sur le Support (Remplace "Total détruit")
                 ]
             },
-            {
-                widget: 'StatCardSimple',
-                title: 'Setup Objectifs Neutres', // Harmonisé avec le Support
-                valueKey: 'preObjectiveClears',
-                opponentValueKey: 'preObjectiveClearsOpponent',
-                format: 'number_one_decimal', // Passage en décimal pour la moyenne
-                bottomText: "Wards nettoyées 60s avant la mort d'un monstre épique."
-            }
+            { metric: METRICS.PRE_OBJECTIVE_CLEARS }
         ]
     }
 ];

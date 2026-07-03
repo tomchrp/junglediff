@@ -1,42 +1,25 @@
 /**
  * ============================================================================
- * FICHIER : frontend/src/core/configs/layouts/shared/visionLayouts.js
+ * FICHIER : frontend/src/core/configs/layouts/shared/controlVisionLayouts.js
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Contient les configurations visuelles partagées entre plusieurs archétypes
- * pour éviter la duplication de code. 
- * Actuellement, centralise la grille de vision pour les rôles Support.
+ * Configuration visuelle partagée pour l'onglet Vision du rôle Support.
+ * Refactorisée (Phase 3) : Utilise le metricsRegistry (Source Unique de Vérité) 
+ * pour garantir l'uniformité sémantique avec les autres rôles.
  * ============================================================================
  */
+
+import { METRICS, TIMELINE_SERIES } from '../../metricsRegistry';
 
 export const supportVisionLayout = [
     {
         type: 'grid',
         cols: 3,
         items: [
-            {
-                widget: 'StatCardMain',
-                title: 'Score Global',
-                mainValueKey: 'visionScore',
-                mainFormat: 'number',
-                footerLabel: 'Ratio :',
-                footerValueKey: 'visionScorePerMinute',
-                footerFormat: 'number_one_decimal',
-                bottomText: 'Impact brut de la vision'
-            },
-            {
-                widget: 'CircularGauge',
-                label: "Part de l'équipe",
-                valueKey: 'teamVisionShare',
-                color: 'text-lol-info'
-            },
-            {
-                widget: 'CircularGauge',
-                label: 'Pénétration Offensive',
-                valueKey: 'controlWardCoverage',
-                color: 'text-lol-info'
-            }
+            { metric: METRICS.VISION_SCORE },
+            { metric: METRICS.TEAM_VISION_SHARE },
+            { metric: METRICS.VISION_PENETRATION } // Standardisé : le texte "Pénétration Offensive" est écrasé par le registre central
         ]
     },
     {
@@ -48,10 +31,10 @@ export const supportVisionLayout = [
                 dataKey: 'timelineGraph.events',
                 xAxisKey: 'timestamp',
                 lines: [
-                    { dataKey: 'playerPlaced', name: 'Posées (Moi)', color: '#0ea5e9', strokeWidth: 2, showDots: true },
-                    { dataKey: 'playerKilled', name: 'Détruites (Moi)', color: '#38bdf8', strokeWidth: 2, isDashed: true, showDots: true },
-                    { dataKey: 'oppPlaced', name: 'Posées (Adv)', color: '#ef4444', strokeWidth: 2, showDots: true },
-                    { dataKey: 'oppKilled', name: 'Détruites (Adv)', color: '#f87171', strokeWidth: 2, isDashed: true, showDots: true }
+                    { metric: TIMELINE_SERIES.PLAYER_WARDS_PLACED },
+                    { metric: TIMELINE_SERIES.PLAYER_WARDS_KILLED },
+                    { metric: TIMELINE_SERIES.OPP_WARDS_PLACED },
+                    { metric: TIMELINE_SERIES.OPP_WARDS_KILLED }
                 ]
             }
         ]
@@ -60,31 +43,17 @@ export const supportVisionLayout = [
         type: 'grid',
         cols: 3,
         items: [
-            {
-                widget: 'StatCardSimple',
-                title: 'Quête Support',
-                valueKey: 'playerQuestTime',
-                opponentValueKey: 'oppQuestTime',
-                format: 'time_milliseconds',
-                polarity: 'negative',
-                bottomText: "Timer d'obtention des balises"
-            },
+            { metric: METRICS.SUPPORT_QUEST_TIME },
             {
                 widget: 'StatCardList',
                 title: 'Détail des Balises',
                 listItems: [
-                    { label: 'Pinks achetées', valueKey: 'controlWardsBought', color: 'text-pink-400' },
-                    { label: 'Balises posées', valueKey: 'wardsPlaced', color: 'text-gray-100' },
-                    { label: 'Balises détruites', valueKey: 'wardsKilled', color: 'text-gray-100' }
+                    { metric: METRICS.CONTROL_WARDS_BOUGHT },
+                    { metric: METRICS.WARDS_PLACED },
+                    { metric: METRICS.WARDS_KILLED }
                 ]
             },
-            {
-                widget: 'StatCardSimple',
-                title: 'Setup Objectifs Neutres',
-                valueKey: 'avgPreObjectiveWards',
-                format: 'number_one_decimal',
-                bottomText: "Wards posées 60s avant la mort d'un monstre épique."
-            }
+            { metric: METRICS.PRE_OBJECTIVE_WARDS }
         ]
     }
 ];

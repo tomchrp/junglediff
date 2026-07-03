@@ -6,11 +6,12 @@
  * DESCRIPTION :
  * Usine à vues (View Factory) pilotée par la configuration (Configuration-Driven UI).
  * Intercepte un schéma JSON (layout) et instancie dynamiquement les primitives React.
- * * MODIFICATIONS :
- * - Correction de la compilation Tailwind (PurgeCSS) : remplacement de 
- * l'interpolation dynamique des colonnes par un dictionnaire statique `gridColsMap`
- * pour garantir l'affichage correct des grilles asymétriques dictées par la configuration.
- * - Ajout des descriptions détaillées sur les fonctions de traitement complexes.
+ * * * MODIFICATIONS (Phase 6 - Verrouillage) :
+ * - Suppression du mode de rétrocompatibilité (fallback).
+ * - Implémentation du Strict Mode : si un bloc de configuration de layout 
+ * ne fait pas référence à une constante du metricsRegistry, son rendu est 
+ * bloqué et une erreur est levée en console. Cela garantit la pérennité 
+ * de la "Single Source of Truth".
  * ============================================================================
  */
 
@@ -76,6 +77,99 @@ const prepareTimelineData = (graphData) => {
     });
 };
 
+/**
+ * MIDDLEWARE DE STANDARDISATION STRICTE (Phase 6)
+ * Fusionne la configuration du layout avec le registre des métriques.
+ * Applique une validation stricte : rejette toute configuration qui tente 
+ * de définir ses propres clés métiers ou labels en dur sans passer par le registre.
+ * * @param {Object} rawItem - Le nœud de configuration du widget brut issu du layout.
+ * @returns {Object|null} La configuration résolue, ou null si elle viole l'architecture.
+ */
+const resolveWidgetConfig = (rawItem) => {
+    // Validation d'architecture : le widget DOIT utiliser le registre
+    const usesRegistry = rawItem.metric
+        || rawItem.row1Metric
+        || (rawItem.listItems && rawItem.listItems.some(li => li.metric))
+        || (rawItem.lines && rawItem.lines.some(l => l.metric));
+
+    if (!usesRegistry) {
+        console.error(`[JungleDiff Strict Mode] Violation d'architecture détectée. Le widget suivant tente de s'afficher sans utiliser le metricsRegistry, ce qui est strictement interdit :`, rawItem);
+        return null;
+    }
+
+    const resolved = { ...rawItem };
+
+    if (rawItem.metric) {
+        resolved.widget = rawItem.widget || rawItem.metric.defaultWidget;
+        resolved.title = rawItem.override?.label || rawItem.metric.defaultLabel || rawItem.title;
+        resolved.label = rawItem.override?.label || rawItem.metric.defaultLabel || rawItem.label;
+        resolved.valueKey = rawItem.metric.valueKey || rawItem.valueKey;
+        resolved.opponentValueKey = rawItem.metric.opponentValueKey || rawItem.opponentValueKey;
+        resolved.format = rawItem.metric.format || rawItem.format;
+        resolved.color = rawItem.override?.color || rawItem.metric.color || rawItem.color;
+        resolved.bottomText = rawItem.override?.description || rawItem.metric.description || rawItem.bottomText;
+        resolved.polarity = rawItem.metric.polarity || rawItem.polarity;
+
+        if (resolved.widget === 'StatCardMain') {
+            resolved.mainValueKey = rawItem.metric.valueKey || rawItem.mainValueKey;
+            resolved.mainFormat = rawItem.metric.format || rawItem.mainFormat;
+
+            const fMetric = rawItem.footerMetric || rawItem.metric.defaultFooter;
+            if (fMetric) {
+                resolved.footerLabel = rawItem.override?.footerLabel || fMetric.label || fMetric.defaultLabel || rawItem.footerLabel;
+                resolved.footerValueKey = fMetric.valueKey || rawItem.footerValueKey;
+                resolved.footerFormat = fMetric.format || rawItem.footerFormat;
+            }
+        }
+    }
+
+    if (rawItem.row1Metric) {
+        resolved.row1Label = rawItem.row1Override?.label || rawItem.row1Metric.defaultLabel || rawItem.row1Label;
+        resolved.row1ValueKey = rawItem.row1Metric.valueKey || rawItem.row1ValueKey;
+        resolved.row1Color = rawItem.row1Override?.color || rawItem.row1Metric.color || rawItem.row1Color;
+        resolved.row1Format = rawItem.row1Override?.format || rawItem.row1Metric.format || rawItem.row1Format; // <-- LIGNE À AJOUTER
+    }
+    if (rawItem.row2Metric) {
+        resolved.row2Label = rawItem.row2Override?.label || rawItem.row2Metric.defaultLabel || rawItem.row2Label;
+        resolved.row2ValueKey = rawItem.row2Metric.valueKey || rawItem.row2ValueKey;
+        resolved.row2Color = rawItem.row2Override?.color || rawItem.row2Metric.color || rawItem.row2Color;
+        resolved.row2Format = rawItem.row2Override?.format || rawItem.row2Metric.format || rawItem.row2Format; // <-- LIGNE À AJOUTER
+    }
+
+    if (rawItem.listItems) {
+        resolved.listItems = rawItem.listItems.map(li => {
+            if (li.metric) {
+                return {
+                    ...li,
+                    label: li.override?.label || li.metric.defaultLabel || li.label,
+                    valueKey: li.metric.valueKey || li.valueKey,
+                    color: li.override?.color || li.metric.color || li.color
+                };
+            }
+            return li;
+        });
+    }
+
+    if (rawItem.lines) {
+        resolved.lines = rawItem.lines.map(line => {
+            if (line.metric) {
+                return {
+                    ...line,
+                    name: line.override?.name || line.metric.defaultName || line.name,
+                    dataKey: line.metric.dataKey || line.dataKey,
+                    color: line.override?.color || line.metric.color || line.color,
+                    strokeWidth: line.metric.strokeWidth !== undefined ? line.metric.strokeWidth : line.strokeWidth,
+                    showDots: line.metric.showDots !== undefined ? line.metric.showDots : line.showDots,
+                    isDashed: line.metric.isDashed !== undefined ? line.metric.isDashed : line.isDashed
+                };
+            }
+            return line;
+        });
+    }
+
+    return resolved;
+};
+
 const DynamicExpertView = ({ layout, data, versionDDragon, isMismatch = false }) => {
 
     const chartDataProcessed = useMemo(() => {
@@ -107,14 +201,19 @@ const DynamicExpertView = ({ layout, data, versionDDragon, isMismatch = false })
 
     /**
      * Cœur du moteur de rendu (View Factory).
-     * Intercepte un bloc de configuration issu du dictionnaire, résout les clés 
-     * de données, applique les multiplicateurs mathématiques et la logique de censure, 
+     * Intercepte un bloc de configuration résolu, extrait les données du backend, 
+     * applique les multiplicateurs mathématiques et la logique de censure adverse, 
      * puis instancie le composant UI correspondant avec les bonnes props.
-     * * @param {Object} item - Le nœud de configuration du widget.
+     * * @param {Object} rawItem - Le nœud de configuration brut.
      * @param {number} index - L'index pour la clé React.
      * @returns {JSX.Element|null} Le composant React prêt à l'affichage.
      */
-    const renderWidget = (item, index) => {
+    const renderWidget = (rawItem, index) => {
+        const item = resolveWidgetConfig(rawItem);
+
+        // Arrêt immédiat si le middleware a rejeté la configuration
+        if (!item) return null;
+
         const mult = item.valueMultiplier || 1;
         const val = data[item.valueKey] !== undefined ? data[item.valueKey] * mult : undefined;
 
@@ -201,20 +300,27 @@ const DynamicExpertView = ({ layout, data, versionDDragon, isMismatch = false })
                 const v1Opp = shouldHideOpponent(item) ? undefined : (data[`${item.row1ValueKey}Opponent`] !== undefined ? data[`${item.row1ValueKey}Opponent`] * mult : undefined);
                 const v2 = data[item.row2ValueKey] !== undefined ? data[item.row2ValueKey] * mult : undefined;
                 const v2Opp = shouldHideOpponent(item) ? undefined : (data[`${item.row2ValueKey}Opponent`] !== undefined ? data[`${item.row2ValueKey}Opponent`] * mult : undefined);
+
+                // <-- LIGNES À AJOUTER : Récupération des formateurs
+                const formatR1 = formatters[item.row1Format] || formatters.number;
+                const formatR2 = formatters[item.row2Format] || formatters.number;
+
                 return (
                     <StatCard key={index} title={item.title}>
                         <div className="flex flex-col gap-4 w-full px-2 justify-center h-full">
                             <div className="flex justify-between items-center w-full">
                                 <span className="text-gray-200 text-xs font-medium">{item.row1Label}</span>
                                 <div className="flex items-center gap-2">
-                                    <span className={`${item.row1Color} font-bold`}>{v1}</span>
+                                    {/* <-- MODIFICATION ICI : On englobe v1 avec formatR1 */}
+                                    <span className={`${item.row1Color} font-bold`}>{formatR1(v1)}</span>
                                     {v1Opp !== undefined && <StatDelta value={v1} opponentValue={v1Opp} showBackground={true} />}
                                 </div>
                             </div>
                             <div className="flex justify-between items-center w-full">
                                 <span className="text-gray-200 text-xs font-medium">{item.row2Label}</span>
                                 <div className="flex items-center gap-2">
-                                    <span className={`${item.row2Color} font-bold`}>{v2}</span>
+                                    {/* <-- MODIFICATION ICI : On englobe v2 avec formatR2 */}
+                                    <span className={`${item.row2Color} font-bold`}>{formatR2(v2)}</span>
                                     {v2Opp !== undefined && <StatDelta value={v2} opponentValue={v2Opp} showBackground={true} />}
                                 </div>
                             </div>
@@ -281,7 +387,6 @@ const DynamicExpertView = ({ layout, data, versionDDragon, isMismatch = false })
         <div className="flex flex-col gap-4 mt-2 w-full animate-in fade-in zoom-in-95 duration-200">
             {layout.map((row, rowIndex) => {
                 if (row.type === 'grid') {
-                    // Application sécurisée de la classe Tailwind via le dictionnaire
                     const lgColsClass = gridColsMap[row.cols] || 'lg:grid-cols-1';
 
                     return (

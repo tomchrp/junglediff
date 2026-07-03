@@ -309,3 +309,14 @@ Les fichiers monolithiques (`support_analyzer.py`, `jungle_analyzer.py`) ont ét
 * **Isolation des Domaines :** L'extraction de données est segmentée géographiquement ou thématiquement. Par exemple, un `VanguardCombatModule` ne gère que les statistiques d'encaissement et de CC, ignorant tout le reste.
 * **Orchestrateur Aveugle (`orchestrator.py`) :** Remplace l'ancienne usine à if/else. Il détermine l'archétype, lit un dictionnaire de registre (`registry.py`), instancie la liste des modules requis de manière agnostique (Duck Typing) et fusionne leurs dictionnaires de retour.
 * **Persistance de l'Héritage Utilitaire :** Bien que l'architecture soit compositionnelle, les modules complexes (Combat) héritent toujours de `BaseRoleAnalyzer` exclusivement pour exploiter son cache partagé Data Dragon et son moteur de parcours temporel (`_extract_timeline_data`), garantissant d'excellentes performances.
+
+
+
+## [2026-07-02] - Refonte de l'architecture des vues expertes (Single Source of Truth)
+
+**Problématique :** Dérive sémantique et redéfinition incohérente des métriques partagées entre différentes vues de rôles (ex: métriques de vision affichant des labels différents pour des données identiques entre Jungle et Support).
+**Solution adoptée :** 
+- Extraction de la définition des widgets et labels hors des configurations de layouts (`*Layouts.js`).
+- Création d'un dictionnaire centralisé (`metricsRegistry.js`) contenant la configuration par défaut de chaque métrique métier.
+- Mise à jour du moteur de rendu (`DynamicExpertView.jsx`) pour fusionner la configuration du registre et la déclaration du layout.
+- Ajout d'un script de génération automatique (`generate_metrics_dict.js`) pour fournir un dictionnaire à jour aux LLM lors de la création de nouvelles vues (Top, Mid, ADC), empêchant les hallucinations de métriques.

@@ -1,50 +1,55 @@
-/**
- * ============================================================================
- * FICHIER : frontend/src/core/configs/layouts/roles/jungle/assassin.js
- * PROJET  : JungleDiff
- *
- * DESCRIPTION :
- * Configuration UI spécifique pour l'archétype ASSASSIN en Jungle.
- * Cartographie tous les onglets : combat, objectifs, ressources, vision.
- * ============================================================================
- */
-
+import { METRICS } from '../../../metricsRegistry';
 import { jungleVisionLayout } from '../../shared/denialVisionLayouts';
 
 export const assassinLayout = {
     combat: [
         {
             type: 'grid', cols: 4, items: [
-                { widget: 'StatCardMain', title: 'Dégâts aux Champions', mainValueKey: 'damageToChampions', mainFormat: 'number', footerLabel: 'Ratio / min :', footerValueKey: 'damagePerMinute', footerFormat: 'number_zero_decimal' },
-                { widget: 'CircularGauge', label: 'Participation (KP)', valueKey: 'killParticipation', color: 'text-lol-info' },
-                { widget: 'StatCardSimple', title: 'Ganks Réussis (<10m)', valueKey: 'earlyGanks', format: 'number' },
-                { widget: 'StatCardDouble', title: 'Utilité au Combat', row1Label: 'Temps CC (s)', row1ValueKey: 'ccTime', row1Color: 'text-gray-100', row2Label: 'Kills Contestés', row2ValueKey: 'contestedKills', row2Color: 'text-gray-100' }
+                { metric: METRICS.DAMAGE_TO_CHAMPIONS },
+                { metric: METRICS.KILL_PARTICIPATION },
+                { metric: METRICS.EARLY_GANKS },
+                {
+                    widget: 'StatCardDouble',
+                    title: 'Utilité au Combat',
+                    row1Metric: METRICS.CC_TIME,
+                    row2Metric: METRICS.CONTESTED_KILLS
+                }
             ]
         }
     ],
     objectives: [
         {
             type: 'grid', cols: 4, items: [
-                { widget: 'StatCardSimple', title: 'Rivière (Carapateurs)', valueKey: 'scuttles', format: 'number' },
-                { widget: 'StatCardSimple', title: 'Vols Épiques', valueKey: 'epicSteals', format: 'number' },
-                { widget: 'StatCardSimple', title: 'Early (Héraut/Grubs)', valueKey: 'earlyObjectives', format: 'number' },
-                { widget: 'StatCardSimple', title: 'Dégâts aux Épiques', valueKey: 'damageToEpic', format: 'number' }
+                { metric: METRICS.SCUTTLES },
+                { metric: METRICS.EPIC_STEALS },
+                { metric: METRICS.EARLY_OBJECTIVES },
+                { metric: METRICS.DAMAGE_TO_EPIC }
             ]
         },
         {
             type: 'grid', cols: 2, items: [
-                { widget: 'StatCardSimple', title: 'Smites Dragons', valueKey: 'dragonKills', format: 'number' },
-                { widget: 'StatCardSimple', title: 'Smites Barons', valueKey: 'baronKills', format: 'number' }
+                { metric: METRICS.DRAGON_KILLS },
+                { metric: METRICS.BARON_KILLS }
             ]
         }
     ],
     resources: [
         {
             type: 'grid', cols: 4, items: [
-                { widget: 'StatCardSimple', title: 'Jungle Alliée', valueKey: 'allyJungleCS', format: 'number', bottomText: 'Monstres tués' },
-                { widget: 'StatCardDouble', title: 'Invasion', row1Label: 'Jungle Ennemie', row1ValueKey: 'enemyJungleCS', row1Color: 'text-lol-info', row2Label: 'Buffs Volés', row2ValueKey: 'buffsStolen', row2Color: 'text-lol-gold' },
-                { widget: 'StatCardSimple', title: 'Golds Générés', valueKey: 'goldEarned', format: 'number' },
-                { widget: 'StatCardDouble', title: 'Rythme (<10m)', row1Label: 'Golds', row1ValueKey: 'earlyGold', row1Color: 'text-lol-gold', row2Label: 'Expérience (Lvl)', row2ValueKey: 'earlyXP', row2Color: 'text-emerald-400' }
+                { metric: METRICS.ALLY_JUNGLE_CS },
+                {
+                    widget: 'StatCardDouble',
+                    title: 'Invasion',
+                    row1Metric: METRICS.ENEMY_JUNGLE_CS,
+                    row2Metric: METRICS.BUFFS_STOLEN
+                },
+                { metric: METRICS.GOLD_EARNED },
+                {
+                    widget: 'StatCardDouble',
+                    title: 'Rythme (<10m)',
+                    row1Metric: METRICS.EARLY_GOLD,
+                    row2Metric: METRICS.EARLY_XP
+                }
             ]
         }
     ],

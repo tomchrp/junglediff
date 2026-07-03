@@ -5,12 +5,8 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Service de traitement de données (Data Engineering).
-Filtre les payloads JSON massifs de l'API Riot Games pour imposer un contrat de données strict. 
-* MODIFICATION : Le trimmer conserve désormais le nœud `damageStats` dans les 
-participantFrames de la timeline. Cela permet de tracer la courbe de dégâts 
-minute par minute pour les analyses de combat (Mages, ADC, etc.).
-* MODIFICATION : Ajout de damageSelfMitigated et totalDamageTaken pour l'analyse
-des tanks (archétype VANGUARD).
+* MODIFICATION : Ajout des clés firstBloodKill et firstBloodAssist à la racine 
+du participant pour alimenter l'onglet Agency.
 ===============================================================================
 """
 
@@ -20,19 +16,12 @@ class DataTrimmer:
     
     @staticmethod
     def trim_match_details(raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Disséque le JSON brut des détails de fin de partie (Match V5).
-        Extrait les métadonnées, les objectifs et les statistiques vitales des participants,
-        incluant le dictionnaire complet des "challenges".
-        """
         if not raw_data or "info" not in raw_data:
             return {}
 
         info = raw_data["info"]
         trimmed_data = {
-            "metadata": {
-                "matchId": raw_data.get("metadata", {}).get("matchId")
-            },
+            "metadata": {"matchId": raw_data.get("metadata", {}).get("matchId")},
             "info": {
                 "gameId": info.get("gameId"),
                 "gameDuration": info.get("gameDuration"),
@@ -76,6 +65,7 @@ class DataTrimmer:
                 "summoner2Id": p.get("summoner2Id"),
                 
                 "goldEarned": p.get("goldEarned", 0),
+                "goldSpent": p.get("goldSpent", 0),
                 "totalDamageDealtToChampions": p.get("totalDamageDealtToChampions", 0),
                 "totalMinionsKilled": p.get("totalMinionsKilled", 0),
                 "neutralMinionsKilled": p.get("neutralMinionsKilled", 0),
@@ -86,6 +76,14 @@ class DataTrimmer:
                 "dragonKills": p.get("dragonKills", 0),
                 "baronKills": p.get("baronKills", 0),
                 
+                # --- OBJECTIFS ET AGENCY ---
+                "damageDealtToBuildings": p.get("damageDealtToBuildings", 0),
+                "firstTowerKill": p.get("firstTowerKill", False),
+                "firstTowerAssist": p.get("firstTowerAssist", False),
+                "firstBloodKill": p.get("firstBloodKill", False),
+                "firstBloodAssist": p.get("firstBloodAssist", False),
+                # ---------------------------
+                
                 "totalDamageShieldedOnTeammates": p.get("totalDamageShieldedOnTeammates", 0),
                 "totalHealsOnTeammates": p.get("totalHealsOnTeammates", 0),
                 "timeCCingOthers": p.get("timeCCingOthers", 0),
@@ -93,10 +91,8 @@ class DataTrimmer:
                 "longestTimeSpentLiving": p.get("longestTimeSpentLiving", 0),
                 "magicDamageDealtToChampions": p.get("magicDamageDealtToChampions", 0),
                 
-                # --- AJOUTS VANGUARD ---
                 "damageSelfMitigated": p.get("damageSelfMitigated", 0),
                 "totalDamageTaken": p.get("totalDamageTaken", 0),
-                # -----------------------
                 
                 "visionScore": p.get("visionScore", 0),
                 "wardsKilled": p.get("wardsKilled", 0),
@@ -131,6 +127,7 @@ class DataTrimmer:
             except Exception:
                 pass 
                 
+            # Les statistiques de Roaming, Sauvetages et Domination sont conservées ici dynamiquement
             raw_challenges = p.get("challenges", {})
             trimmed_participant["challenges"] = {
                 k: v for k, v in raw_challenges.items() if v is not None
@@ -142,11 +139,6 @@ class DataTrimmer:
 
     @staticmethod
     def trim_match_timeline(raw_timeline: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Disséque le JSON brut de la timeline.
-        Conserve l'état des frames (positions, or, et désormais les statistiques de dégâts) 
-        et une liste blanche d'événements stricts.
-        """
         if not raw_timeline or "info" not in raw_timeline:
             return {}
 
@@ -172,7 +164,6 @@ class DataTrimmer:
                     "minionsKilled": p_data.get("minionsKilled"),
                     "jungleMinionsKilled": p_data.get("jungleMinionsKilled"),
                     "timeEnemySpentControlled": p_data.get("timeEnemySpentControlled"),
-                    # Conservation du dictionnaire des dégâts
                     "damageStats": p_data.get("damageStats", {}) 
                 }
                 
@@ -198,6 +189,19 @@ class DataTrimmer:
                     elif ev_type == "ITEM_PURCHASED":
                         light_event["participantId"] = event.get("participantId")
                         light_event["itemId"] = event.get("itemId")
+                        
+                    elif ev_type == "BUILDING_KILL":
+                        light_event["teamId"] = event.get("teamId")
+                        light_event["buildingType"] = event.get("buildingType")
+                        light_event["towerType"] = event.get("towerType")
+                        light_event["laneType"] = event.get("laneType")
+                        light_event["killerId"] = event.get("killerId")
+                    
+                    elif ev_type == "CHAMPION_KILL":
+                        light_event["killerId"] = event.get("killerId")
+                        light_event["victimId"] = event.get("victimId")
+                        light_event["assistingParticipantIds"] = event.get("assistingParticipantIds", [])
+                        light_event["position"] = event.get("position")
                         
                     trimmed_frame["events"].append(light_event)
                     
