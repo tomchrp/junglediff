@@ -24,6 +24,7 @@ class DataTrimmer:
             "metadata": {"matchId": raw_data.get("metadata", {}).get("matchId")},
             "info": {
                 "gameId": info.get("gameId"),
+                "queueId": info.get("queueId"),
                 "gameDuration": info.get("gameDuration"),
                 "gameCreation": info.get("gameCreation"),
                 "gameVersion": info.get("gameVersion"),

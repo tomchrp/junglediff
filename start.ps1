@@ -26,3 +26,7 @@ Write-Host "Lancement du Frontend React (Vite)..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd frontend; npm run dev"
 
 Write-Host "Tous les services sont en cours de lancement." -ForegroundColor Green
+
+Write-Host "Ouverture de l'application dans Google Chrome..." -ForegroundColor Yellow
+Start-Sleep -Seconds 3
+Start-Process chrome "http://localhost:5173"

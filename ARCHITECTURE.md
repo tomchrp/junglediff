@@ -320,3 +320,29 @@ Les fichiers monolithiques (`support_analyzer.py`, `jungle_analyzer.py`) ont ét
 - Création d'un dictionnaire centralisé (`metricsRegistry.js`) contenant la configuration par défaut de chaque métrique métier.
 - Mise à jour du moteur de rendu (`DynamicExpertView.jsx`) pour fusionner la configuration du registre et la déclaration du layout.
 - Ajout d'un script de génération automatique (`generate_metrics_dict.js`) pour fournir un dictionnaire à jour aux LLM lors de la création de nouvelles vues (Top, Mid, ADC), empêchant les hallucinations de métriques.
+
+
+## 12. Standardisation UI et Ergonomie (Juillet 2026)
+
+Pour faire face aux incohérences visuelles et aux problèmes de performances liés au DOM, l'interface utilisateur a subi une cure de standardisation agressive, consolidant le "Design System".
+
+### 12.1. Primitive Visuelle (`Avatar.jsx`)
+* **Bordures Natives DataDragon :** Les images carrées fournies par l'API Riot contiennent des bordures noires incrustées.
+* **Solution System Design :** Création d'une primitive universelle `<Avatar>`. Elle gère le rognage des bordures noires via un `scale-[1.15]` masqué par un conteneur `overflow-hidden`. Ce composant est désormais l'unique source de vérité pour toutes les images (Champions, Items, Runes, Spells, Lanes) et gère dynamiquement les focus (bordures dorées) et les arrondis standards (`rounded-md`).
+
+### 12.2. Ergonomie Navigationnelle (`FilterBar`)
+* **Loi de Fitts et Fréquence :** Les actions ont été scindées selon leur fréquence d'utilisation.
+* **Actions Fréquentes :** Les filtres de rôle (Lanes) sont sortis du volet déroulant pour devenir des boutons interactifs directement exposés. Ils implémentent une logique de bascule (Toggle) : cliquer sur un filtre actif réinitialise la vue.
+* **Actions Secondaires :** Le filtre de Patch reste confiné dans un composant `CustomSelect` pour économiser l'espace horizontal.
+
+### 12.3. Résilience de l'Infinite Scroll (`MatchList`)
+Le bouton de chargement manuel a été remplacé par un système hybride d'Autoload asynchrone.
+* **Intersection Observer :** Le chargement local se déclenche nativement à l'approche du bas de page.
+* **Scroll Anchoring :** Pour contrer les "Layout Shifts" (sauts de page) causés par le moteur de rendu natif de Google Chrome/Firefox lors de l'injection d'éléments DOM au-dessus du focus, le point d'intersection (la sentinelle) est verrouillé avec une hauteur stricte et la règle CSS `overflow-anchor: none`.
+* **Deep Fetch Manuel :** Le bouton manuel est conservé uniquement comme garde-fou pour déclencher la recherche sur les archives distantes de Riot.
+
+### 12.4. Le Scoreboard Universel (`MatchCardSummary`)
+L'onglet "Résumé" des parties refuse catégoriquement d'inclure des métriques spécifiques par rôle afin de préserver sa fonction première : la **comparaison verticale**.
+* **Alignement Mathématique :** L'UI superpose les métriques transverses (KDA, KP%, Dégâts, Économie) pour que l'œil de l'utilisateur puisse scanner la colonne de haut en bas et identifier les anomalies (le Carry, le Feeder).
+* **Jauge Relative :** Les dégâts ne sont plus de simples nombres. Ils sont accompagnés d'une jauge de progression dont le 100% est indexé dynamiquement sur le joueur ayant infligé le maximum de dégâts au sein de la même équipe.
+* **Sanctuarisation de l'Analyse :** Toute métrique conditionnelle ou spécifique à un rôle (Tournelles, Vision pure, Pathing) est bannie de cette vue et strictement réservée aux sous-onglets d'Analyse (`RoleAnalysisController`).

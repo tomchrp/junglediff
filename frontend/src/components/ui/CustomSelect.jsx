@@ -35,12 +35,14 @@ export default function CustomSelect({ value, options, onChange, placeholder = "
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center justify-between w-full min-w-[160px] bg-surface-solid text-gray-100 px-3 py-1.5 outline-none border rounded-md cursor-pointer text-sm transition-all duration-200 ${isOpen ? 'border-lol-gold shadow-glow-gold' : 'border-border-strong hover:border-gray-400'}`}
+                // Modification ici : ajout de h-7, suppression de py-1.5, passage en text-xs
+                className={`flex items-center justify-between w-full min-w-[160px] h-7 bg-surface-solid text-gray-100 px-3 outline-none border rounded-md cursor-pointer text-xs transition-all duration-200 ${isOpen ? 'border-lol-gold shadow-glow-gold' : 'border-border-strong hover:border-gray-400'}`}
             >
                 <span className="truncate pr-2 font-medium">
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-lol-textMuted transition-transform duration-200 ${isOpen ? 'rotate-180 text-lol-gold' : ''}`} />
+                {/* Légère réduction du chevron pour s'adapter aux 28px de hauteur */}
+                <ChevronDown className={`w-3.5 h-3.5 text-lol-textMuted transition-transform duration-200 ${isOpen ? 'rotate-180 text-lol-gold' : ''}`} />
             </button>
 
             {/* MENU DÉROULANT (GLASSMORPHISM) */}

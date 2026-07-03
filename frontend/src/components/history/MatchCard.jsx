@@ -5,27 +5,77 @@
  *
  * DESCRIPTION :
  * Composant parent (Orchestrateur) pour l'affichage détaillé d'un match.
- * Applique le Design System "Dark Data-Viz".
- * * MODIFICATIONS (Refacto Layered Architecture) :
- * - Suppression de l'intégration directe des composants de rôles (Jungle/Support).
- * - Intégration du `RoleAnalysisController` pour router dynamiquement les 
- * données d'analyse peu importe le rôle joué, purgeant ce composant 
- * de toute logique conditionnelle complexe.
+ * 
+ * MODIFICATIONS RECENTES :
+ * - Remplacement de toutes les balises <img> brutes par la primitive <Avatar>.
+ * - Harmonisation totale des bordures, tailles et fonds (system design).
+ * - Correction de l'ergonomie : le survol (hover) ne s'applique qu'à l'en-tête cliquable.
+ * - Transmission de la durée de partie (gameDuration) au composant MatchCardSummary pour les calculs de CS/min.
  * ============================================================================
  */
 
 import React, { useState, useEffect } from 'react';
 import MatchCardSummary from './MatchCardSummary.jsx';
 import MatchCardDivers from './MatchCardDivers.jsx';
-// NOUVEL IMPORT UNIQUE POUR TOUS LES RÔLES
 import RoleAnalysisController from './roles/RoleAnalysisController.jsx';
+import Avatar from '../ui/Avatar.jsx'; // NOUVEL IMPORT OBLIGATOIRE
 
 const SUMMONER_SPELLS = { 4: "SummonerFlash", 11: "SummonerSmite", 12: "SummonerTeleport", 14: "SummonerDot", 7: "SummonerHeal", 6: "SummonerHaste", 3: "SummonerExhaust", 21: "SummonerBarrier", 1: "SummonerBoost", 32: "SummonerSnowball" };
 const RUNE_PATHS = { 8000: "7201_Precision", 8100: "7200_Domination", 8200: "7202_Sorcery", 8300: "7203_Whimsy", 8400: "7204_Resolve" };
 
+const QUEUE_MAPPING = {
+    400: 'Draft',
+    420: 'Solo/Duo',
+    430: 'Normal Aveugle',
+    440: 'Classé Flex',
+    450: 'ARAM',
+    700: 'Clash',
+};
+
+const KEYSTONE_PATHS = {
+    8008: "Styles/Precision/LethalTempo/LethalTempoTemp",
+    8005: "Styles/Precision/PressTheAttack/PressTheAttack",
+    8010: "Styles/Precision/Conqueror/Conqueror",
+    8021: "Styles/Precision/FleetFootwork/FleetFootwork",
+    8112: "Styles/Domination/Electrocute/Electrocute",
+    8124: "Styles/Domination/Predator/Predator",
+    8128: "Styles/Domination/DarkHarvest/DarkHarvest",
+    8106: "Styles/Domination/HailOfBlades/HailOfBlades",
+    8214: "Styles/Sorcery/SummonAery/SummonAery",
+    8229: "Styles/Sorcery/ArcaneComet/ArcaneComet",
+    8230: "Styles/Sorcery/PhaseRush/PhaseRush",
+    8437: "Styles/Resolve/GraspOfTheUndying/GraspOfTheUndying",
+    8439: "Styles/Resolve/VeteranAftershock/VeteranAftershock",
+    8465: "Styles/Resolve/Guardian/Guardian",
+    8351: "Styles/Inspiration/GlacialAugment/GlacialAugment",
+    8360: "Styles/Inspiration/UnsealedSpellbook/UnsealedSpellbook",
+    8369: "Styles/Inspiration/FirstStrike/FirstStrike"
+};
+
+const LANE_MAPPING = {
+    'TOP': 'top',
+    'JUNGLE': 'jungle',
+    'MIDDLE': 'mid',
+    'BOTTOM': 'bot',
+    'UTILITY': 'support'
+};
+
+const ROLE_ORDER = {
+    'TOP': 1, 'JUNGLE': 2, 'MIDDLE': 3, 'BOTTOM': 4, 'UTILITY': 5
+};
+
 /**
- * Composant principal affichant la carte d'un match.
+ * Trie les participants de l'équipe pour correspondre à l'ordre canonique des rôles.
+ * Top -> Jungle -> Mid -> Bot -> Support
  */
+const sortTeamByRole = (participants) => {
+    return [...participants].sort((a, b) => {
+        const orderA = ROLE_ORDER[a.teamPosition] || 99;
+        const orderB = ROLE_ORDER[b.teamPosition] || 99;
+        return orderA - orderB;
+    });
+};
+
 const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, championMap, currentServer, onPlayerSearch }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('resume');
@@ -33,8 +83,8 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
     const [isTimelineLoading, setIsTimelineLoading] = useState(false);
     const [fetchedTimeline, setFetchedTimeline] = useState(null);
 
-    const info = match.info;
-    const currentPlayer = info.participants.find(p => p.puuid === playerPuuid);
+    const info = match.info || {};
+    const currentPlayer = info.participants?.find(p => p.puuid === playerPuuid);
 
     if (!currentPlayer) return null;
 
@@ -47,18 +97,33 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
     const isWin = currentPlayer.win;
     const durationMin = Math.floor(info.gameDuration / 60);
     const durationSec = info.gameDuration % 60;
+    const timeFormatted = `${durationMin}:${durationSec < 10 ? `0${durationSec}` : durationSec}`;
+    
+    const queueId = info.queueId || match.queueId || match.queue_id || match.metadata?.queueId;
+    const queueName = queueId ? (QUEUE_MAPPING[queueId] || 'Inconnu') : 'Inconnu';
 
     const team100 = info.participants.filter(p => p.teamId === 100);
     const team200 = info.participants.filter(p => p.teamId === 200);
 
+    const sortedTeam100 = sortTeamByRole(team100);
+    const sortedTeam200 = sortTeamByRole(team200);
+
     const getChampionImageName = (champId) => championMap[champId] || "Inconnu";
     const currentUserChampImage = getChampionImageName(currentPlayer.championId);
+    const opponentChampImage = opponent ? getChampionImageName(opponent.championId) : null;
 
     const hasTimeline = match.timeline || match.raw_timeline_data || match.raw_data?.timeline || fetchedTimeline;
 
+    const keystoneId = currentPlayer.perks?.primarySelection || currentPlayer.perks?.styles?.[0]?.selections?.[0]?.perk || currentPlayer.keystone_id;
+    const keystonePath = KEYSTONE_PATHS[keystoneId] || RUNE_PATHS[currentPlayer.perks?.primaryStyle] || "7200_Domination";
+
+    const totalCS = (currentPlayer.totalMinionsKilled || 0) + (currentPlayer.neutralMinionsKilled || 0);
+    const csPerMin = info.gameDuration > 0 ? (totalCS / (info.gameDuration / 60)).toFixed(1) : "0.0";
+
     /**
-     * Gère le cycle de vie réseau lié à la timeline du match.
-     * Implémente un délai de grâce et l'anticipation spatiale.
+     * Polling asynchrone pour la récupération en arrière-plan de la timeline.
+     * Cette fonction vérifie le statut du cache ou de l'appel Riot côté backend
+     * et pré-charge les parties adjacentes pour fluidifier l'expérience.
      */
     useEffect(() => {
         let pollingTimeoutId;
@@ -75,7 +140,6 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
 
                 if (response.ok) {
                     const result = await response.json();
-
                     if (result.status === 'ready') {
                         setFetchedTimeline(result.data);
                         setIsTimelineLoading(false);
@@ -89,7 +153,6 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     pollingTimeoutId = setTimeout(checkTimelineStatus, currentDelay);
                 }
             } catch (error) {
-                console.error("Erreur de polling timeline:", error);
                 currentDelay = Math.min(currentDelay * 1.5, 8000);
                 pollingTimeoutId = setTimeout(checkTimelineStatus, currentDelay);
             }
@@ -97,29 +160,20 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
 
         const triggerAnticipation = async () => {
             if (!isOpen) return;
-
             try {
                 const matchId = match.metadata?.matchId || match.match_id;
                 let prefetchIds = [];
 
                 if (matchList && matchList.length > 0) {
                     const currentIndex = matchList.findIndex(m => (m.metadata?.matchId || m.match_id) === matchId);
-                    if (currentIndex > 0) {
-                        const prevMatch = matchList[currentIndex - 1];
-                        prefetchIds.push(prevMatch.metadata?.matchId || prevMatch.match_id);
-                    }
-                    if (currentIndex < matchList.length - 1) {
-                        const nextMatch = matchList[currentIndex + 1];
-                        prefetchIds.push(nextMatch.metadata?.matchId || nextMatch.match_id);
-                    }
+                    if (currentIndex > 0) prefetchIds.push(matchList[currentIndex - 1].metadata?.matchId || matchList[currentIndex - 1].match_id);
+                    if (currentIndex < matchList.length - 1) prefetchIds.push(matchList[currentIndex + 1].metadata?.matchId || matchList[currentIndex + 1].match_id);
                 }
 
                 if (prefetchIds.length > 0) {
                     fetch(`http://localhost:8000/api/v1/matches/${matchId}/timeline/status?puuid=${playerPuuid}&server=${currentServer}&prefetch_ids=${prefetchIds.join(',')}`).catch(() => { });
                 }
-            } catch (e) {
-                // Ignoré silencieusement pour ne pas polluer la console
-            }
+            } catch (e) {}
         };
 
         if (isOpen && !hasTimeline) {
@@ -143,76 +197,170 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
     };
 
     const accentClass = isWin ? 'border-l-lol-win' : 'border-l-lol-loss';
+    const kdaRatio = currentPlayer.deaths > 0 
+        ? ((currentPlayer.kills + currentPlayer.assists) / currentPlayer.deaths).toFixed(2) 
+        : 'Parfait';
 
     return (
-        <div className={`mb-3 glass-panel-interactive border-l-4 overflow-hidden ${accentClass}`}>
-            <div onClick={handleCardClick} className="p-4 flex items-center w-full select-none cursor-pointer">
-                {/* Section Avatar & Champion */}
-                <div className="flex items-center gap-3 w-[160px] shrink-0 min-w-0 pr-2">
-                    <img
-                        src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${currentUserChampImage}.png`}
-                        alt={currentUserChampImage}
-                        className="w-12 h-12 rounded-md border border-border-strong shrink-0"
-                        onError={(e) => e.target.src = 'https://ddragon.leagueoflegends.com/cdn/14.12.1/img/profileicon/29.png'}
-                    />
-                    <div className="min-w-0 flex-1">
-                        <div className="text-gray-100 font-bold text-sm truncate">{currentUserChampImage}</div>
-                        {currentPlayer.teamPosition && (
-                            <img
-                                src={`/assets/lanes/${currentPlayer.teamPosition.toLowerCase()}.png`}
-                                alt={currentPlayer.teamPosition}
-                                className="w-4 h-4 mt-1 object-contain"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                            />
-                        )}
+        <div className={`mb-3 glass-panel border-l-4 overflow-hidden transition-all duration-200 ease-in-out ${accentClass}`}>
+            <div onClick={handleCardClick} className="px-5 py-4 flex items-center justify-between w-full select-none cursor-pointer hover:bg-white/5 transition-colors">
+                
+                {/* 1. Bloc Métadonnées */}
+                <div className="w-[80px] shrink-0 flex flex-col items-center justify-center text-center">
+                    <div className="text-gray-100 font-bold text-xs uppercase tracking-wide">
+                        {queueName}
+                    </div>
+                    <div className="text-lol-textMuted text-xs font-medium mt-1">
+                        {timeFormatted}
                     </div>
                 </div>
 
-                {/* Section Runes & Sorts */}
-                <div className="flex gap-1 items-center w-[70px] shrink-0">
-                    <div className="flex flex-col gap-0.5">
-                        {[currentPlayer.summoner1Id, currentPlayer.summoner2Id].map((id, index) => (
-                            <img key={index} src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/spell/${SUMMONER_SPELLS[id] || "SummonerFlash"}.png`} alt="Sort" className="w-5 h-5 rounded-md border border-border-glass" />
+                {/* 2. Bloc Affrontement (Matchup) */}
+                <div className="flex items-center justify-center w-[80px] shrink-0">
+                    <div className="relative w-[80px] h-16">
+
+                        {/* Adversaire (Arrière-plan, décalé en haut à droite) */}
+                        {opponent && (
+                            <div className="absolute top-0 right-0 z-0">
+                                <Avatar
+                                    type="champion"
+                                    size="base"
+                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${opponentChampImage}.png`}
+                                    alt="Opponent"
+                                    className="brightness-75 grayscale-[20%]"
+                                />
+                                {/* Badge VS (Passage de bg-surface-elevated à bg-surface-solid pour l'harmonie) */}
+                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-surface-solid border border-border-strong rounded-md flex items-center justify-center text-[9px] font-bold text-lol-textMuted shadow-sm z-10">
+                                    VS
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Joueur (Premier plan, décalé en bas à gauche) */}
+                        <div className="absolute bottom-0 left-0 z-10">
+                            <Avatar
+                                type="champion"
+                                size="md"
+                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${currentUserChampImage}.png`}
+                                alt={currentUserChampImage}
+                                className="shadow-md"
+                            />
+                            {/* Badge Lane */}
+                            {currentPlayer.teamPosition && (
+                                <div className="absolute -bottom-1.5 -left-1.5 z-20">
+                                    <Avatar
+                                        type="rune"
+                                        size="xs"
+                                        src={`/assets/lanes/${LANE_MAPPING[currentPlayer.teamPosition] || currentPlayer.teamPosition.toLowerCase()}.png`}
+                                        alt={currentPlayer.teamPosition}
+                                        className="shadow-sm"
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
+                </div>
+
+                {/* 3. Bloc Performances */}
+                <div className="flex items-center justify-center gap-4 shrink-0 w-[160px]">
+                    <div className="text-center w-[80px]">
+                        <div className="text-gray-100 font-bold text-sm">
+                            {currentPlayer.kills} / <span className="text-lol-loss">{currentPlayer.deaths}</span> / {currentPlayer.assists}
+                        </div>
+                        <div className="text-lol-textMuted text-xs mt-0.5 font-medium">
+                            {kdaRatio} KDA
+                        </div>
+                    </div>
+
+                    <div className="text-center w-[60px]">
+                        <div className="text-gray-100 font-bold text-sm flex items-center justify-center">
+                            {totalCS} <span className="text-lol-textMuted text-[10px] uppercase tracking-wider ml-1">CS</span>
+                        </div>
+                        <div className="text-lol-textMuted text-xs mt-0.5 font-medium">
+                            {csPerMin} / min
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Bloc Équipement */}
+                <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex gap-1 items-center shrink-0">
+                        <div className="flex flex-col gap-0.5">
+                            {[currentPlayer.summoner1Id, currentPlayer.summoner2Id].map((id, index) => (
+                                <Avatar 
+                                    key={index} 
+                                    type="spell" 
+                                    size="xs" 
+                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/spell/${SUMMONER_SPELLS[id] || "SummonerFlash"}.png`} 
+                                    alt="Sort" 
+                                />
+                            ))}
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <Avatar 
+                                type="rune" 
+                                size="xs" 
+                                src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/${keystonePath}.png`} 
+                                alt="Keystone" 
+                            />
+                            <Avatar 
+                                type="rune" 
+                                size="xs" 
+                                src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${RUNE_PATHS[currentPlayer.perks?.subStyle] || "7201_Precision"}.png`} 
+                                alt="Rune secondaire" 
+                                className="opacity-70" 
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex gap-1 shrink-0">
+                        {[currentPlayer.item0, currentPlayer.item1, currentPlayer.item2, currentPlayer.item3, currentPlayer.item4, currentPlayer.item5, currentPlayer.item6].map((itemId, idx) => (
+                            itemId > 0 ? (
+                                <Avatar 
+                                    key={idx} 
+                                    type="item" 
+                                    size="sm" 
+                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/item/${itemId}.png`} 
+                                    alt="Objet" 
+                                />
+                            ) : (
+                                <div key={idx} className="w-7 h-7 bg-surface-solid rounded-md border border-border-glass shrink-0"></div>
+                            )
                         ))}
                     </div>
-                    <div className="flex flex-col gap-0.5 pl-1">
-                        <div className="w-5 h-5 bg-surface-solid rounded-md border border-border-glass flex items-center justify-center p-0.5">
-                            <img src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${RUNE_PATHS[currentPlayer.perks?.primaryStyle] || "7200_Domination"}.png`} alt="Rune" className="w-full h-full object-contain" />
-                        </div>
-                        <div className="w-5 h-5 bg-surface-solid rounded-md border border-border-glass flex items-center justify-center p-0.5">
-                            <img src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${RUNE_PATHS[currentPlayer.perks?.subStyle] || "7201_Precision"}.png`} alt="Rune" className="w-full h-full object-contain opacity-70" />
-                        </div>
+                </div>
+
+                {/* 5. Bloc Compositions */}
+                <div className="flex flex-col gap-[3px] shrink-0 w-[110px]">
+                    <div className="flex gap-[2px]">
+                        {sortedTeam100.map(p => (
+                            <Avatar 
+                                key={p.puuid} 
+                                type="champion" 
+                                size="xs" 
+                                isSelected={p.puuid === playerPuuid}
+                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`} 
+                                alt={getChampionImageName(p.championId)}
+                                className={p.puuid !== playerPuuid ? "opacity-80" : ""}
+                            />
+                        ))}
+                    </div>
+                    <div className="flex gap-[2px]">
+                        {sortedTeam200.map(p => (
+                            <Avatar 
+                                key={p.puuid} 
+                                type="champion" 
+                                size="xs" 
+                                isSelected={p.puuid === playerPuuid}
+                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`} 
+                                alt={getChampionImageName(p.championId)}
+                                className={p.puuid !== playerPuuid ? "opacity-80" : ""}
+                            />
+                        ))}
                     </div>
                 </div>
 
-                {/* Section Issue du Match & Durée */}
-                <div className="text-center w-[90px] shrink-0">
-                    <div className={`text-sm font-bold ${isWin ? 'text-lol-win' : 'text-lol-loss'}`}>
-                        {isWin ? 'VICTOIRE' : 'DÉFAITE'}
-                    </div>
-                    <div className="text-lol-textMuted text-xs font-semibold mt-1">
-                        {durationMin}:{durationSec < 10 ? `0${durationSec}` : durationSec}
-                    </div>
-                </div>
-
-                {/* Section KDA */}
-                <div className="text-center w-[120px] shrink-0">
-                    <div className="text-gray-100 font-bold text-sm">
-                        {currentPlayer.kills} / <span className="text-lol-loss">{currentPlayer.deaths}</span> / {currentPlayer.assists}
-                    </div>
-                    <div className="text-lol-textMuted text-xs mt-1 font-medium">
-                        {currentPlayer.deaths > 0 ? `${((currentPlayer.kills + currentPlayer.assists) / currentPlayer.deaths).toFixed(2)} KDA` : 'KDA Parfait'}
-                    </div>
-                </div>
-
-                {/* Section Équipement */}
-                <div className="flex gap-1 justify-end flex-1 pl-4 min-w-0">
-                    {[currentPlayer.item0, currentPlayer.item1, currentPlayer.item2, currentPlayer.item3, currentPlayer.item4, currentPlayer.item5, currentPlayer.item6].map((itemId, idx) => (
-                        <div key={idx} className="w-7 h-7 bg-surface-solid rounded-md border border-border-glass overflow-hidden shrink-0">
-                            {itemId > 0 && <img src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/item/${itemId}.png`} alt="Objet" className="w-full h-full object-cover" onError={(e) => e.target.style.display = 'none'} />}
-                        </div>
-                    ))}
-                </div>
             </div>
 
             {/* ACCORDÉON DÉROULANT */}
@@ -235,17 +383,16 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     </div>
 
                     {activeTab === 'resume' && (
-                        <MatchCardSummary team100={team100} team200={team200} playerPuuid={playerPuuid} versionDDragon={versionDDragon} championMap={championMap} currentServer={currentServer} onPlayerSearch={onPlayerSearch} />
+                        <MatchCardSummary team100={team100} team200={team200} playerPuuid={playerPuuid} versionDDragon={versionDDragon} championMap={championMap} currentServer={currentServer} onPlayerSearch={onPlayerSearch} gameDuration={info.gameDuration} />
                     )}
 
-                    {/* APPEL UNIQUE AU CONTRÔLEUR DYNAMIQUE */}
                     {activeTab === 'role_analysis' && (
                         <RoleAnalysisController
                             matchId={match.metadata?.matchId || match.match_id}
                             puuid={playerPuuid}
                             role={currentPlayer.teamPosition}
                             isTimelineLoading={isTimelineLoading}
-                            versionDDragon={versionDDragon} // <-- AJOUT ICI
+                            versionDDragon={versionDDragon}
                         />
                     )}
 

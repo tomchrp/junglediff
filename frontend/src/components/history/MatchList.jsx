@@ -8,16 +8,11 @@
  * Intègre la différenciation sémantique du bouton de bas de page et des
  * en-têtes collants (Sticky Headers) pour maintenir le contexte temporel 
  * et de version lors du défilement.
- * ANTI-DÉCALAGE : Calcule une limite dynamique lors des rafraîchissements 
- * en arrière-plan pour maintenir le volume de cartes affichées et empêcher 
- * la perte de la position de lecture (Scroll Anchoring).
- * 
- * CHANGEMENTS "DARK DATA-VIZ" :
- * - Remplacement de l'overlay de chargement (bg-lol-bg/80) par bg-app/80.
- * - L'état vide (Empty State) devient un .glass-panel propre sans bordures bleues.
- * - Les séparateurs collants utilisent bg-app (Patch) et bg-surface-solid/95 (Date) 
- *   pour une intégration parfaite au défilement.
- * - Le bouton de chargement passe sur la primitive glass-panel-interactive.
+ * * MODIFICATIONS RECENTES :
+ * - Implémentation de l'Infinite Scroll (Intersection Observer) : le chargement 
+ * des parties locales se déclenche désormais automatiquement au défilement.
+ * - Le bouton manuel est conservé EXCLUSIVEMENT comme garde-fou pour 
+ * le deep-fetch (Recherche dans les archives de l'API Riot).
  * ============================================================================
  */
 
@@ -41,16 +36,10 @@ const MatchList = ({
 
     const limit = 10;
     const scrollRef = useRef(null);
+    const loadingRef = useRef(null); // Référence pour l'Infinite Scroll
 
     /**
      * Exécute la requête HTTP pour récupérer l'historique paginé depuis l'API locale.
-     * Construit dynamiquement l'URL en appliquant les filtres actifs (rôle, patch, champion) 
-     * et gère le curseur de pagination (endTime) pour accumuler les matchs sans perte.
-     * 
-     * @param {number|null} currentEndTime - Timestamp du dernier match chargé.
-     * @param {number} overrideLimit - Nombre de matchs à requérir (ajustable pour le Scroll Anchoring).
-     * @param {AbortSignal|null} signal - Signal pour annuler la requête en cas de démontage.
-     * @returns {Array} Liste des nouveaux matchs récupérés.
      */
     const fetchMatches = async (currentEndTime = endTime, overrideLimit = limit, signal = null) => {
         if (!playerPuuid) return [];
@@ -112,9 +101,6 @@ const MatchList = ({
 
     /**
      * Gère la logique de pagination intelligente à deux niveaux.
-     * Interroge d'abord la base de données locale. Si les données locales sont épuisées,
-     * déclenche un deep-fetch asynchrone vers les serveurs de Riot Games pour 
-     * étendre l'historique du joueur, puis relance une requête locale.
      */
     const loadMoreMatches = async () => {
         if (matches.length === 0 || isLoading) return;
@@ -149,6 +135,38 @@ const MatchList = ({
         }
     };
 
+    /**
+     * 3. INFINITE SCROLL : Observer pour le chargement automatique.
+     * Se déclenche uniquement s'il reste des parties locales (hasMoreLocal).
+     */
+    useEffect(() => {
+        // On ne met pas en place l'observer s'il n'y a plus de données locales ou si on charge déjà
+        if (!hasMoreLocal || isLoading || matches.length === 0) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    loadMoreMatches();
+                }
+            },
+            {
+                root: scrollRef.current,
+                rootMargin: '200px', // Déclenche le chargement 200px avant d'atteindre le fond
+                threshold: 0.1
+            }
+        );
+
+        if (loadingRef.current) {
+            observer.observe(loadingRef.current);
+        }
+
+        return () => {
+            if (loadingRef.current) observer.unobserve(loadingRef.current);
+            observer.disconnect();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hasMoreLocal, isLoading, matches]);
+
     const formatDateLabel = (timestamp) => {
         const date = new Date(timestamp);
         return date.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -156,11 +174,6 @@ const MatchList = ({
 
     /**
      * Transforme la liste plate des matchs en une structure arborescente imbriquée.
-     * Les données sont d'abord groupées par version majeure de patch, puis 
-     * subdivisées par journée calendaire pour permettre l'affichage des 
-     * en-têtes collants contextuels.
-     * 
-     * @returns {Object} Dictionnaire structuré { "14.12": { "lundi 10 juin": [...] } }
      */
     const getStructuredHistory = () => {
         const patchGroups = {};
@@ -198,7 +211,6 @@ const MatchList = ({
 
             {Object.keys(structuredData).map((patch) => (
                 <div key={patch}>
-                    {/* Séparateur de Patch : Hauteur stricte (h-10) et suppression du margin-bottom */}
                     <div className="sticky top-0 z-20 h-10 bg-app/90 backdrop-blur-md flex items-center">
                         <div className="flex-1 border-t border-border-strong"></div>
                         <span className="px-4 text-lol-gold text-xs font-bold tracking-widest uppercase">
@@ -209,7 +221,6 @@ const MatchList = ({
 
                     {Object.keys(structuredData[patch]).map((dateLabel) => (
                         <div key={dateLabel}>
-                            {/* Séparateur de Date : S'emboîte exactement sous le patch (top-10 = 40px) */}
                             <div className="sticky top-10 z-10 bg-app/90 backdrop-blur-md py-2 mb-3 flex items-center">
                                 <span className="text-lol-textMuted text-xs font-bold uppercase tracking-wider pr-4">
                                     {dateLabel}
@@ -236,17 +247,31 @@ const MatchList = ({
                 </div>
             ))}
 
-            {(hasMoreLocal || hasMoreRiot) && matches.length > 0 && (
+            {/* SENTINELLE POUR L'AUTOLOAD (Infinite Scroll Local) */}
+            {hasMoreLocal && matches.length > 0 && (
+                <div
+                    ref={loadingRef}
+                    // Remplacement de "py-6" par "h-20" (hauteur fixe de 80px garantie)
+                    className="w-full h-20 flex justify-center items-center shrink-0"
+                    // Désactivation de l'ancrage natif du navigateur pour cette zone précise
+                    style={{ overflowAnchor: 'none' }}
+                >
+                    {isLoading && (
+                        <div className="w-8 h-8 border-4 border-lol-gold border-t-transparent rounded-full animate-spin"></div>
+                    )}
+                </div>
+            )}
+
+            {/* BOUTON MANUEL POUR LE DEEP FETCH (Archives Riot) */}
+            {!hasMoreLocal && hasMoreRiot && matches.length > 0 && (
                 <button
                     onClick={loadMoreMatches}
                     disabled={isLoading}
                     className="my-4 glass-panel-interactive text-lol-gold font-bold py-2.5 w-full text-center disabled:opacity-50 text-sm cursor-pointer"
                 >
                     {isLoading
-                        ? 'Interrogation des bases de données...'
-                        : hasMoreLocal
-                            ? 'Afficher les parties suivantes'
-                            : 'Rechercher dans les archives Riot'
+                        ? 'Recherche dans les archives en cours...'
+                        : 'Rechercher dans les archives Riot'
                     }
                 </button>
             )}

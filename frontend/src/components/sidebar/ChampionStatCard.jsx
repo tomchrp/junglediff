@@ -6,12 +6,13 @@
  * DESCRIPTION :
  * Affiche les statistiques résumées d'un champion spécifique dans la Sidebar.
  * Ce composant utilise le Design System pour sa structure (Glassmorphism),
- * mais conserve la gestion d'image originelle (rounded-sm) pour éviter le 
- * rognage intempestif des artworks de DataDragon.
+ * et intègre désormais la primitive universelle <Avatar> pour garantir
+ * le rognage parfait de la bordure noire de DataDragon et une harmonie totale.
  * ============================================================================
  */
 
 import React from 'react';
+import Avatar from '../ui/Avatar.jsx';
 
 const ChampionStatCard = ({ championName, gamesPlayed, wins, winrate, isSelected, versionDDragon, onClick }) => {
     // Application de la règle sémantique : Winrate >= 50% = Succès
@@ -27,12 +28,12 @@ const ChampionStatCard = ({ championName, gamesPlayed, wins, winrate, isSelected
             onClick={onClick}
             className={`w-full text-left p-3 mb-2 flex items-center gap-4 rounded-lg transition-all duration-200 cursor-pointer border ${cardStyle}`}
         >
-            {/* RESTAURATION EXACTE DE TON IMAGE */}
-            <img
+            <Avatar
+                type="champion"
+                size="md"
                 src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon || '14.12.1'}/img/champion/${championName}.png`}
                 alt={championName}
-                className={`w-12 h-12 rounded-sm border shrink-0 ${isSelected ? 'border-lol-gold' : 'border-border-strong'}`}
-                onError={(e) => { e.target.src = `https://ddragon.leagueoflegends.com/cdn/${versionDDragon || '14.12.1'}/img/profileicon/29.png`; }}
+                isSelected={isSelected}
             />
 
             <div className="flex-1 min-w-0">

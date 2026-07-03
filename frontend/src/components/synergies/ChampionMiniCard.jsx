@@ -7,11 +7,12 @@
  * Carte atomique affichant les statistiques croisées d'un champion spécifique.
  * Affiche l'icône, le winrate coloré et le volume de parties.
  * * DESIGN SYSTEM : Utilisation de la primitive glass-panel-interactive pour
- * gérer nativement les états de survol et les bordures. Application stricte
- * des jetons sémantiques de réussite (lol-win / lol-loss).
+ * gérer nativement les états de survol et les bordures. Intégration de la
+ * primitive <Avatar> pour standardiser l'affichage de l'icône de champion.
  * ============================================================================
  */
 import React from 'react';
+import Avatar from '../ui/Avatar.jsx';
 
 export default function ChampionMiniCard({ championId, championName, winrate, gamesPlayed, versionDDragon }) {
     // Évaluation sémantique du succès
@@ -25,11 +26,11 @@ export default function ChampionMiniCard({ championId, championName, winrate, ga
 
     return (
         <div className="glass-panel-interactive p-2 flex items-center gap-3">
-            <img
+            <Avatar
+                type="champion"
+                size="base"
                 src={imageUrl}
                 alt={championName}
-                className="w-10 h-10 rounded-md border border-border-strong shrink-0"
-                onError={(e) => { e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/profile-icons/29.jpg'; }}
             />
             <div className="flex flex-col min-w-0">
                 <span className="text-gray-100 text-xs font-semibold truncate" title={championName}>
