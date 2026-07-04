@@ -57,13 +57,13 @@ class SyncService:
         region = routing["region"]
 
         # 1. Résolution du PUUID (Account V1)
-        account = await self.client.get_account_by_riot_id(continent, game_name, tag_line)
+        account = await self.client.get_account_by_riot_id(continent, game_name, tag_line, fail_fast=True)
         if not account:
             return {"error": "Joueur introuvable. Vérifiez le pseudo et le tag."}
         puuid = account.get("puuid")
 
         # 2. Récupération Summoner V4
-        summoner_data = await self.client.get_summoner_by_puuid(region, puuid)
+        summoner_data = await self.client.get_summoner_by_puuid(region, puuid, fail_fast=True)
         if not summoner_data:
             return {"error": f"Impossible de récupérer le profil sur le serveur {server}."}
 
@@ -72,7 +72,7 @@ class SyncService:
         tier, rank, lp = None, None, None
         
         if summoner_id:
-            league_data = await self.client.get_league_entries(region, summoner_id)
+            league_data = await self.client.get_league_entries(region, summoner_id, fail_fast=True)
             for entry in league_data:
                 if entry.get("queueType") == "RANKED_SOLO_5x5":
                     tier = entry.get("tier")
@@ -82,9 +82,9 @@ class SyncService:
 
         # 4. Le "Triple Appel Léger" (Conservation de 20 par file pour la vue historique globale)
         api_tasks = [
-            self.client.get_match_ids(continent, puuid, queue=420, count=20),
-            self.client.get_match_ids(continent, puuid, queue=440, count=20),
-            self.client.get_match_ids(continent, puuid, queue=400, count=20)
+            self.client.get_match_ids(continent, puuid, queue=420, count=20, fail_fast=True),
+            self.client.get_match_ids(continent, puuid, queue=440, count=20, fail_fast=True),
+            self.client.get_match_ids(continent, puuid, queue=400, count=20, fail_fast=True)
         ]
         
         lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)

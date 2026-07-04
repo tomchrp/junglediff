@@ -5,12 +5,13 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Routeur FastAPI dédié aux statistiques globales (Big Data).
-Interroge le Hot Storage (table match_participants) pour agréger les données
-sur l'ensemble des parties ingérées par le crawler, sans filtrer par joueur.
+Interroge le Hot Storage pour les données de champions et le Cold Storage (JSONB)
+pour la ventilation absolue par type de file d'attente (queue_id).
 
 FONCTIONNALITÉS :
-- get_global_champions : Agrège les matchs par champion, calcule le volume total
-  et le taux de victoire global.
+- get_global_champions : Agrège les matchs par champion et effectue un 
+  groupement (GROUP BY) directement dans les propriétés JSON des matchs pour
+  isoler les modes de jeu (SoloQ, ARAM, Flex, etc.).
 ===============================================================================
 """
 
@@ -20,19 +21,62 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 
 from app.db.session import get_db
-from app.db.models import MatchParticipant
+from app.db.models import MatchParticipant, Match
 
 router = APIRouter()
 
 @router.get("/champions", response_model=Dict[str, Any])
 async def get_global_champions(db: AsyncSession = Depends(get_db)):
     """
-    Récupère la liste de tous les champions joués dans la base de données,
-    triés par popularité (nombre de matchs décroissant).
+    Récupère les statistiques de champions et lit la colonne JSON raw_match_data 
+    pour grouper les parties par type de file (queueId).
     """
     try:
-        # 1. Requête d'agrégation SQL optimisée
-        query = (
+        # 1. Agrégation par mode de jeu via lecture JSONB
+        # Astuce PostgreSQL : On utilise .astext pour extraire la valeur JSON 
+        # sous forme de chaîne de caractères et pouvoir la grouper.
+        queue_expr = Match.raw_match_data['info']['queueId'].astext
+        query_modes = (
+            select(
+                queue_expr.label("queue_id"),
+                func.count(Match.match_id).label("count")
+            )
+            .group_by(queue_expr)
+        )
+        
+        modes_result = await db.execute(query_modes)
+        modes_rows = modes_result.fetchall()
+        
+        # Dictionnaire de traduction des files courantes Riot
+        queue_dict = {
+            "420": "Classé Solo/Duo",
+            "440": "Classé Flex",
+            "400": "Draft Normal",
+            "450": "ARAM",
+            "430": "Aveugle Normal",
+            "490": "Partie Rapide",
+            "1700": "Arena",
+            "1900": "URF"
+        }
+        
+        modes_repartition = []
+        total_matches_in_db = 0
+        
+        for row in modes_rows:
+            q_id_str = str(row.queue_id)
+            count = row.count
+            total_matches_in_db += count
+            modes_repartition.append({
+                "queue_id": q_id_str,
+                "name": queue_dict.get(q_id_str, f"Inconnu ({q_id_str})"),
+                "count": count
+            })
+            
+        # Tri décroissant pour afficher les modes les plus joués en premier
+        modes_repartition.sort(key=lambda x: x["count"], reverse=True)
+
+        # 2. Agrégation des champions (Hot Storage)
+        query_champs = (
             select(
                 MatchParticipant.champion_id,
                 func.count(MatchParticipant.id).label("total_matches"),
@@ -42,16 +86,15 @@ async def get_global_champions(db: AsyncSession = Depends(get_db)):
             .order_by(func.count(MatchParticipant.id).desc())
         )
         
-        result = await db.execute(query)
-        rows = result.fetchall()
+        result_champs = await db.execute(query_champs)
+        rows_champs = result_champs.fetchall()
         
-        # 2. Formatage de la réponse
         champions_data = []
-        total_games_in_db = 0
+        total_participations = 0
         
-        for row in rows:
+        for row in rows_champs:
             champ_id, matches, wins = row
-            total_games_in_db += matches
+            total_participations += matches
             
             champions_data.append({
                 "champion_id": champ_id,
@@ -62,7 +105,9 @@ async def get_global_champions(db: AsyncSession = Depends(get_db)):
             
         return {
             "status": "success",
-            "total_analyzed_participations": total_games_in_db,
+            "total_matches_in_db": total_matches_in_db,
+            "total_analyzed_participations": total_participations,
+            "modes_repartition": modes_repartition,
             "champions": champions_data
         }
         

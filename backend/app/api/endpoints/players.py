@@ -21,6 +21,7 @@ import time
 
 from app.db.session import get_db
 from app.services.sync_service import SyncService
+from app.services.riot_client import RateLimitExceeded
 from app.db.repositories import PlayerRepository
 from app.db.models import Player, MatchParticipant, Match
 
@@ -34,17 +35,24 @@ class PlayerSyncRequest(BaseModel):
 @router.post("/update")
 async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = Depends(get_db)):
     """
-    Route d'ingestion initiale. Déclenche le service de synchronisation qui 
-    récupère le profil Riot, vérifie le Data Lake local, et place les nouvelles 
-    parties en file d'attente ARQ.
+    Déclenche l'ingestion asynchrone complète du joueur.
     """
     service = SyncService(db)
-    result = await service.sync_player_profile(request.server, request.game_name, request.tag_line)
     
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+    try:
+        result = await service.sync_player_profile(request.server, request.game_name, request.tag_line)
         
-    return result
+        if result and "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+            
+        return result
+        
+    except RateLimitExceeded as e:
+        # Renvoi de l'erreur 429 (Too Many Requests) avec le délai exact
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Le Crawler analyse actuellement un volume massif de données. Veuillez réessayer dans {e.ttl} secondes."
+        )
 
 @router.get("/{puuid}/summary")
 async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):

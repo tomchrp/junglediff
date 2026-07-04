@@ -5,9 +5,9 @@
  *
  * DESCRIPTION :
  * Composant de restitution visuelle du Big Data.
- * Interroge l'API globale pour récupérer et afficher les statistiques 
- * d'utilisation (Winrate, Pickrate brut) de tous les champions stockés 
- * dans le Hot Storage de la base de données.
+ * Affiche la ventilation exacte des parties ingérées selon leur mode de jeu
+ * (récupéré depuis le JSONB backend) afin de garantir l'absence de pollution 
+ * par des files non désirées (ARAM, Arena, etc.).
  * ============================================================================
  */
 
@@ -20,8 +20,7 @@ const GlobalChampionsView = () => {
     const [error, setError] = useState(null);
 
     /**
-     * Effectue l'appel API vers la route d'agrégation globale des champions.
-     * Gère les états de chargement et d'erreur de la requête.
+     * Exécute l'appel réseau vers l'API d'agrégation.
      */
     useEffect(() => {
         const fetchGlobalStats = async () => {
@@ -44,7 +43,7 @@ const GlobalChampionsView = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-full p-8 text-lol-gold">
-                <p>Analyse du Big Data en cours...</p>
+                <p>Analyse du Big Data et extraction JSON en cours...</p>
             </div>
         );
     }
@@ -68,12 +67,45 @@ const GlobalChampionsView = () => {
     return (
         <div className="flex flex-col h-full bg-surface-solid text-gray-100 p-4 overflow-y-auto custom-scrollbar">
             <div className="mb-6 border-b border-border-glass pb-4">
-                <h2 className="text-xl font-bold text-lol-gold uppercase tracking-wider">
+                <h2 className="text-xl font-bold text-lol-gold uppercase tracking-wider mb-4">
                     Analyse Globale des Champions
                 </h2>
-                <p className="text-sm text-lol-textMuted mt-1">
-                    Volume analysé : {stats.total_analyzed_participations.toLocaleString()} participations
-                </p>
+
+                {/* Section Contrôle de Qualité des Données */}
+                <div className="bg-surface-elevated p-4 rounded border border-border-strong mb-4">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-sm font-bold text-gray-100 uppercase tracking-wider">
+                            Intégrité de la Base de Données
+                        </h3>
+                        <span className="text-xs text-lol-textMuted font-mono">
+                            Total : {stats.total_matches_in_db.toLocaleString()} matchs
+                        </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                        {stats.modes_repartition?.map((mode) => {
+                            const isLegit = ['420', '440', '400'].includes(mode.queue_id);
+
+                            return (
+                                <div
+                                    key={mode.queue_id}
+                                    className={`px-3 py-1.5 rounded flex flex-col border ${isLegit
+                                            ? 'bg-blue-900/20 border-blue-500/30 text-blue-100'
+                                            : 'bg-red-900/30 border-red-500/60 text-red-100'
+                                        }`}
+                                >
+                                    <span className="text-[10px] uppercase font-bold opacity-75">
+                                        {isLegit ? mode.name : `POLLUTION: ${mode.name}`}
+                                    </span>
+                                    <span className="font-mono font-bold text-sm">
+                                        {mode.count.toLocaleString()}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
             </div>
 
             <div className="space-y-2">

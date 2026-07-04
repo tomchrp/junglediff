@@ -7,6 +7,7 @@ PROJET  : JungleDiff
 
 import time
 import logging
+import asyncio
 from typing import Optional
 from sqlalchemy import select, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,11 +82,28 @@ class CrawlerService:
 
         try:
             routing = self.client.get_routing("EUW")
-            # SUPPRESSION DU FILTRE queue=420 POUR GARANTIR DE TROUVER DES MATCHS
-            match_ids = await self.client.get_match_ids(routing["continent"], target_puuid, count=40)
-            state.total_requests_made += 1
+            
+            # TRIPLE APPEL (Alignement avec sync_service)
+            # Ciblage strict : Draft (400), SoloQ (420), Flex (440)
+            api_tasks = [
+                self.client.get_match_ids(routing["continent"], target_puuid, queue=420, count=20),
+                self.client.get_match_ids(routing["continent"], target_puuid, queue=440, count=20),
+                self.client.get_match_ids(routing["continent"], target_puuid, queue=400, count=20)
+            ]
+            
+            
+            lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
+            state.total_requests_made += 3 # On a fait 3 requêtes
+            
+            # Fusion et dédoublonnage
+            all_fetched_ids = set()
+            for l in lists_of_ids:
+                if isinstance(l, list):
+                    all_fetched_ids.update(l)
+                    
+            match_ids = list(all_fetched_ids)
 
-            if match_ids and isinstance(match_ids, list):
+            if match_ids:
                 current_time = int(time.time() * 1000)
                 for m_id in match_ids:
                     try:
@@ -184,14 +202,14 @@ class CrawlerService:
                     )
                     self.db.add(new_player)
                     
-                    # LE BRIDAGE EST ICI : On n'ajoute à la file que si le mode n'est pas actif
-                    if not state.extraction_only:
-                        try:
-                            self.db.add(CrawlerQueue(puuid=p_puuid, status="PENDING", discovery_depth=1, discovered_at=current_time))
-                        except IntegrityError:
-                            pass
+                # 2. BRIDAGE ET SNOWBALLING (Désormais indépendant de is_new_player)
+                if not state.extraction_only:
+                    # Vérification SQL propre : le joueur est-il déjà dans la file d'attente ?
+                    queue_exist = await self.db.execute(select(CrawlerQueue.puuid).where(CrawlerQueue.puuid == p_puuid))
+                    if not queue_exist.scalar_one_or_none():
+                        self.db.add(CrawlerQueue(puuid=p_puuid, status="PENDING", discovery_depth=1, discovered_at=current_time))
 
-                # 2. INJECTION HOT STORAGE (MatchParticipant)
+                # 3. INJECTION HOT STORAGE (MatchParticipant)
                 mp_exist = await self.db.execute(select(MatchParticipant.id).where(MatchParticipant.match_id == target_match_id).where(MatchParticipant.puuid == p_puuid))
                 if not mp_exist.scalar_one_or_none():
                     new_mp = MatchParticipant(
