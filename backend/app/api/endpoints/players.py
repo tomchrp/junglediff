@@ -8,6 +8,8 @@ Routeur gérant les interactions liées aux joueurs. Expose la route d'ingestion
 (update), les routes de lecture (summary, champion-stats), ainsi que la route 
 de polling (sync-status) qui a été modifiée pour renvoyer le nombre de parties 
 ingérées en temps réel.
+Intègre le mécanisme "Offline-First" absolu pour permettre l'utilisation
+de l'application même lorsque l'API Riot est bloquée par le crawler.
 ===============================================================================
 """
 
@@ -35,20 +37,49 @@ class PlayerSyncRequest(BaseModel):
 @router.post("/update")
 async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = Depends(get_db)):
     """
-    Déclenche l'ingestion asynchrone complète du joueur.
+    Point d'entrée principal pour la synchronisation du profil joueur.
+    Implémente une vérification locale ultra-robuste (nettoyage des espaces et 
+    de la casse via le moteur SQL) avant de tenter l'appel Riot. Si le client Riot 
+    lève une exception de Rate Limit, la fonction court-circuite l'erreur et renvoie
+    le PUUID local pour permettre au frontend de s'afficher instantanément.
     """
+    # 1. Vérification Locale Ultra-Robuste (Mode Offline-First)
+    # Suppression des espaces et forçage en minuscules pour contrer les anomalies Riot
+    clean_db_name = func.replace(func.lower(Player.riot_id_name), ' ', '')
+    clean_req_name = request.game_name.lower().replace(' ', '')
+    
+    query = select(Player).where(
+        clean_db_name == clean_req_name,
+        func.lower(Player.riot_id_tagline) == func.lower(request.tag_line)
+    )
+    
+    # Utilisation de scalars().first() pour prévenir un crash 500 en cas de doublon en base
+    local_player_result = await db.execute(query)
+    local_player = local_player_result.scalars().first()
+    
     service = SyncService(db)
     
     try:
+        # 2. Tentative de synchronisation en temps réel avec l'API Riot
         result = await service.sync_player_profile(request.server, request.game_name, request.tag_line)
         
         if result and "error" in result:
+            if local_player:
+                return {"status": "offline_fallback", "puuid": local_player.puuid, "warning": result["error"]}
             raise HTTPException(status_code=404, detail=result["error"])
             
         return result
         
     except RateLimitExceeded as e:
-        # Renvoi de l'erreur 429 (Too Many Requests) avec le délai exact
+        # 3. LE BOUCLIER OFFLINE
+        if local_player:
+            return {
+                "status": "offline_fallback", 
+                "puuid": local_player.puuid, 
+                "warning": "Mode hors-ligne: Le Crawler monopolise l'API."
+            }
+            
+        # Si le joueur n'existe pas en base et que l'API est bloquée, le refus est inévitable
         raise HTTPException(
             status_code=429, 
             detail=f"Le Crawler analyse actuellement un volume massif de données. Veuillez réessayer dans {e.ttl} secondes."
@@ -120,7 +151,8 @@ async def get_champion_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Renvoie les statistiques agrégées des champions pour la Sidebar.
+    Renvoie les statistiques agrégées des champions pour l'affichage de la Sidebar.
+    Prend en compte les potentiels paramètres optionnels de filtre de lane ou de patch.
     """
     repo = PlayerRepository(db)
     stats = await repo.get_champion_stats_sidebar(puuid, lane, patch)
@@ -130,7 +162,8 @@ async def get_champion_stats(
 async def get_sync_status(puuid: str, db: AsyncSession = Depends(get_db)):
     """
     Détermine l'état de synchronisation d'un joueur en base de données de façon 
-    progressive.
+    progressive. Compare le délai depuis la dernière mise à jour globale et le 
+    volume de parties ingérées pour indiquer au frontend de libérer l'interface.
     """
     query_player = select(Player).where(Player.puuid == puuid)
     result_player = await db.execute(query_player)
@@ -162,9 +195,10 @@ async def get_player_analytics(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Endpoint analytique puissant. Effectue une auto-jointure sur MatchParticipant
-    pour calculer le taux de victoire du joueur (mp1) en fonction de la présence
-    d'un allié ou adversaire (mp2).
+    Endpoint analytique dédié au croisement de données massives. Effectue une 
+    auto-jointure complète sur la table MatchParticipant pour calculer le taux 
+    de victoire d'un joueur (mp1) en fonction de la présence avérée d'un allié 
+    ou d'un adversaire spécifique (mp2).
     """
     mp1 = aliased(MatchParticipant)
     mp2 = aliased(MatchParticipant)

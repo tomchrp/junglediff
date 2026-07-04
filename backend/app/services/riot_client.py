@@ -12,7 +12,6 @@ class RiotAPIError(Exception):
     pass
 
 class RateLimitExceeded(RiotAPIError):
-    # Ajout du constructeur pour stocker le TTL
     def __init__(self, ttl: int):
         self.ttl = ttl
         super().__init__(f"Rate limit Riot atteint. Réessayez dans {ttl}s.")
@@ -27,11 +26,18 @@ ROUTING_MAP = {
 }
 
 class RiotClient:
+    # CLÉ DE VOÛTE : Connexion Redis partagée pour éviter l'épuisement (Connection Leak)
+    _redis_client = None
+
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.headers = {"X-Riot-Token": self.api_key}
         self.timeout = httpx.Timeout(10.0, connect=5.0)
-        self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        
+        # On n'instancie Redis qu'une seule fois pour toute la durée de vie du serveur
+        if RiotClient._redis_client is None:
+            RiotClient._redis_client = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        self.redis = RiotClient._redis_client
 
     @staticmethod
     def get_routing(server_input: str) -> dict:
