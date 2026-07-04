@@ -346,3 +346,21 @@ L'onglet "Résumé" des parties refuse catégoriquement d'inclure des métriques
 * **Alignement Mathématique :** L'UI superpose les métriques transverses (KDA, KP%, Dégâts, Économie) pour que l'œil de l'utilisateur puisse scanner la colonne de haut en bas et identifier les anomalies (le Carry, le Feeder).
 * **Jauge Relative :** Les dégâts ne sont plus de simples nombres. Ils sont accompagnés d'une jauge de progression dont le 100% est indexé dynamiquement sur le joueur ayant infligé le maximum de dégâts au sein de la même équipe.
 * **Sanctuarisation de l'Analyse :** Toute métrique conditionnelle ou spécifique à un rôle (Tournelles, Vision pure, Pathing) est bannie de cette vue et strictement réservée aux sous-onglets d'Analyse (`RoleAnalysisController`).
+
+## 13. Architecture du Moteur Big Data (Crawler)
+
+### 13.1. Files d'Attente Persistantes (PostgreSQL)
+L'ingestion de masse est gérée par un processus asynchrone indépendant (Worker) via le script `run_crawler.py`. Au lieu de dépendre d'outils externes de file d'attente en mémoire vive, la persistance est assurée par PostgreSQL via les tables `crawler_queue` (joueurs découverts) et `crawler_match_queue` (matchs identifiés). Cette conception garantit l'intégrité transactionnelle (gestion des erreurs avec rollback) et permet de résister aux coupures brutales sans perte d'état.
+
+### 13.2. Contrôle d'État (Singleton) et Mode "Extraction Seule"
+Le pilotage du worker repose sur une table Singleton (`crawler_state`). 
+* **Réactivité :** Le worker lit cet état avant chaque itération (grâce au forçage de rafraîchissement via SQLAlchemy), permettant une mise en pause immédiate de l'ingestion depuis le frontend.
+* **Bridage de l'Exploration (Extraction Only) :** Un mode spécifique a été implémenté pour interdire l'insertion de nouveaux joueurs (fin du "Snowballing") dans la file d'attente, tout en forçant la consommation exclusive de la file existante.
+
+### 13.3. Télémétrie via Server-Sent Events (SSE)
+Pour le monitoring en temps réel, le backend expose un flux SSE (`stream-metrics`). Un soin particulier a été apporté à la gestion des sessions SQLAlchemy : la transaction est commitée à chaque itération de la boucle de streaming pour vider le cache transactionnel. Cela garantit que le tableau de bord frontend reçoit des métriques strictement à jour (requêtes, taille des files, statut) sans effet de "données fantômes".
+
+## 14. Restitution Globale du Big Data
+
+### 14.1. Agrégation SQL Directe (Hot Storage)
+L'interface dispose d'une vue transversale (`GlobalChampionsView`) pour analyser les données de l'ensemble des parties ingérées, hors du prisme d'un joueur unique. Pour des raisons de performance, le calcul des métriques (Winrate, Pickrate brut) n'est pas fait en mémoire applicative. Il est délégué au moteur PostgreSQL via une requête d'agrégation native (`GROUP BY champion_id`). Le serveur backend ne fait que sérialiser le résultat, évitant ainsi le crash par saturation de la mémoire (OOM) lors de l'instanciation de milliers de modèles ORM `MatchParticipant`.

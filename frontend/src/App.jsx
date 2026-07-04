@@ -24,6 +24,7 @@ import MatchList from './components/history/MatchList.jsx';
 import SynergiesMatchupsWrapper from './components/synergies/SynergiesMatchupsWrapper.jsx';
 import ChatView from './components/chat/ChatView.jsx';
 import { addProfileToHistory } from './services/historyService.js';
+import GlobalChampionsView from './components/global/GlobalChampionsView.jsx';
 
 function App() {
   const { view: urlView, server: urlServer, riotId: urlRiotId } = useParams();
@@ -355,6 +356,11 @@ function App() {
                   matches={[]}
                 />
               )}
+
+              {/* NOUVELLE VUE : ANALYSE GLOBALE */}
+              {currentMainView === 'ANALYSE_GLOBALE' && (
+                <GlobalChampionsView />
+              )}
             </div>
 
           </div>
@@ -363,5 +369,7 @@ function App() {
     </div>
   );
 }
+
+
 
 export default App;
