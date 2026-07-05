@@ -7,7 +7,10 @@
  * Panneau de contrôle du Crawler Big Data.
  * Se connecte au flux SSE du backend pour afficher les métriques en temps réel.
  * Permet l'injection d'une graine, le contrôle du cycle de vie (Start/Pause),
- * et l'activation du mode "Extraction Seule" (bridage de l'exploration).
+ * et la sélection de la vitesse d'ingestion (Modes à 3 états).
+ * * MODIFICATIONS (PHASE 4 BIG DATA) :
+ * - Remplacement du toggle `extraction_only` par un sélecteur `crawler_mode`.
+ * - Interfaçage avec la nouvelle route API `/set-mode`.
  * ============================================================================
  */
 
@@ -18,7 +21,7 @@ import { Activity, Play, Pause, Database, Users, Server, PlayCircle, Trash2, Fil
 const CrawlerDashboard = () => {
     const [metrics, setMetrics] = useState({
         is_active: false,
-        extraction_only: false, // État du bridage
+        crawler_mode: "DISCOVERY_AND_DETAILS", // Remplacement du booléen
         total_requests: 0,
         players_pending: 0,
         matches_pending: 0,
@@ -63,16 +66,14 @@ const CrawlerDashboard = () => {
         }
     };
 
-    // Basculer le mode Extraction Seule
-    const handleToggleExtraction = async () => {
+    // Changer le mode d'ingestion (3 vitesses)
+    const handleSetMode = async (mode) => {
         try {
-            const newState = !metrics.extraction_only;
-            const res = await axios.post('http://localhost:8000/api/v1/crawler/toggle-extraction', { extraction_only: newState });
-            // NE METTRE À JOUR QUE SI LE SERVEUR A RÉPONDU OK
-            setMetrics(prev => ({ ...prev, extraction_only: newState }));
-            setStatusMessage(res.data.message);
+            const res = await axios.post('http://localhost:8000/api/v1/crawler/set-mode', { mode });
+            setMetrics(prev => ({ ...prev, crawler_mode: res.data.crawler_mode }));
+            setStatusMessage(`Mode changé avec succès : ${mode}`);
         } catch (error) {
-            setStatusMessage("Erreur : Vérifiez le terminal backend.");
+            setStatusMessage("Erreur lors du changement de mode. Vérifiez le terminal backend.");
             console.error(error);
         }
     };
@@ -148,25 +149,42 @@ const CrawlerDashboard = () => {
                     </div>
                 )}
 
-                {/* Panneau de contrôle Extraction Only */}
-                <div className="glass-panel p-4 flex items-center justify-between bg-surface-solid border border-border-glass">
+                {/* Panneau de contrôle : Mode d'Ingestion (3 vitesses) */}
+                <div className="glass-panel p-6 flex flex-col gap-4 bg-surface-solid border border-border-glass">
                     <div>
-                        <h3 className="font-bold text-gray-100 flex items-center gap-2">
-                            <Filter className="w-4 h-4 text-lol-gold" />
-                            Mode "Extraction Seule"
+                        <h3 className="font-bold text-gray-100 flex items-center gap-2 mb-2">
+                            <Filter className="w-5 h-5 text-lol-gold" />
+                            Vitesse et Cible d'Ingestion
                         </h3>
-                        <p className="text-xs text-lol-textMuted mt-1">
-                            {metrics.extraction_only
-                                ? "ACTIF : Le crawler télécharge les matchs en attente, mais ignore les nouveaux joueurs rencontrés."
-                                : "INACTIF : Exploration dynamique (Snowballing) active."}
-                        </p>
                     </div>
-                    <button
-                        onClick={handleToggleExtraction}
-                        className={`px-6 py-2 rounded font-bold transition-all border ${metrics.extraction_only ? 'bg-blue-600 border-blue-500 text-white' : 'bg-surface-elevated text-gray-400 border-border-strong hover:text-gray-200'}`}
-                    >
-                        {metrics.extraction_only ? 'Désactiver le Bridage' : 'Brider l\'Exploration'}
-                    </button>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Option 1 : Boule de neige (Défaut) */}
+                        <button
+                            onClick={() => handleSetMode("DISCOVERY_AND_DETAILS")}
+                            className={`p-4 rounded border text-left transition-all ${metrics.crawler_mode === 'DISCOVERY_AND_DETAILS' ? 'bg-lol-gold/10 border-lol-gold text-lol-gold' : 'bg-surface-elevated border-border-strong text-gray-400 hover:border-gray-500'}`}
+                        >
+                            <div className="font-bold mb-1">Exploration Complète</div>
+                            <div className="text-xs opacity-80">Découvre de nouveaux joueurs et télécharge les détails des matchs. (Snowballing)</div>
+                        </button>
+
+                        {/* Option 2 : Bridé */}
+                        <button
+                            onClick={() => handleSetMode("DETAILS_ONLY")}
+                            className={`p-4 rounded border text-left transition-all ${metrics.crawler_mode === 'DETAILS_ONLY' ? 'bg-blue-500/10 border-blue-500 text-blue-400' : 'bg-surface-elevated border-border-strong text-gray-400 hover:border-gray-500'}`}
+                        >
+                            <div className="font-bold mb-1">Bridé (Détails Seulement)</div>
+                            <div className="text-xs opacity-80">Dépile les matchs existants dans la file d'attente sans découvrir de nouveaux joueurs.</div>
+                        </button>
+
+                        {/* Option 3 : Rattrapage Timelines */}
+                        <button
+                            onClick={() => handleSetMode("TIMELINES_ONLY")}
+                            className={`p-4 rounded border text-left transition-all ${metrics.crawler_mode === 'TIMELINES_ONLY' ? 'bg-purple-500/10 border-purple-500 text-purple-400' : 'bg-surface-elevated border-border-strong text-gray-400 hover:border-gray-500'}`}
+                        >
+                            <div className="font-bold mb-1">Rattrapage Timelines</div>
+                            <div className="text-xs opacity-80">Ignore les files. Scanne la base et télécharge les timelines manquantes pour extraire les métriques à 15 min.</div>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Métriques */}

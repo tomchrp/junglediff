@@ -9,6 +9,9 @@ Pydantic. Il charge les variables d'environnement (base de données, Redis,
 paramètres de l'API Riot) et garantit que l'application ne démarre pas si une 
 variable critique est manquante. Il prépare également le terrain pour la 
 récupération dynamique de la clé API depuis Redis.
+
+MODIFICATIONS :
+- Ajout des paramètres de configuration S3/MinIO pour le Data Lake.
 ===============================================================================
 """
 
@@ -44,6 +47,12 @@ class Settings(BaseSettings):
 
     # API LLM (Gemma)
     GEMMA_API_KEY: str
+    
+    # Paramètres MinIO (Absolute Cold Storage)
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "junglediff_admin"
+    MINIO_SECRET_KEY: str = "SuperSecretKey123!"
+    MINIO_BUCKET_NAME: str = "junglediff-datalake"
     
     # Configuration Pydantic pour lire le fichier .env
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)

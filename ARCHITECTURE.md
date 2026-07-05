@@ -4,50 +4,51 @@
 
 JungleDiff est une application web analytique destinée aux joueurs de League of Legends. L'objectif est de fournir des métriques avancées et des analyses croisées en exploitant les API Riot Games (Account V1, Match V5). 
 
-L'application est conçue pour fonctionner initialement en local, mais son architecture backend (Python/FastAPI) est dimensionnée avec une stack professionnelle pour supporter une future mise en production et une utilisation massive.
+L'application est conçue pour fonctionner initialement en local, mais son architecture backend (Python/FastAPI) est dimensionnée avec une stack professionnelle pour supporter une future mise en production et une utilisation massive (Big Data).
 
 ### Fonctionnalités cibles (Vues Frontend)
-*   **Vue Historique :** Liste paginée (lazy loading) des matchs d'un joueur (date, patch, champion, KDA, victoire/défaite) avec volet déroulant pour le détail.
-*   **Vue Clear :** Analyse spécifique pour les Junglers. Cartographie de la route moyenne lors du premier clear (0 à 4 minutes), filtrable par champion, patch et côté de la carte (Bleu/Rouge).
-*   **Vue Synergies et Matchups :** Analyse du winrate croisé d'un joueur en fonction des champions alliés ou ennemis rencontrés sur des positions spécifiques.
+* **Vue Historique :** Liste paginée (lazy loading) des matchs d'un joueur.
+* **Vue Clear :** Analyse spécifique pour les Junglers (Pathing).
+* **Vue Synergies et Matchups :** Analyse du winrate croisé d'un joueur en fonction des champions alliés ou ennemis rencontrés sur des positions spécifiques.
+* **Outil de Draft (Cible) :** Recommandation en temps réel basée sur les métriques communautaires croisées avec les performances du joueur.
 
 ---
 
-## 2. Stratégies de Conception Technique
+## 2. Stratégies de Conception Technique (Data Engineering)
 
-Pour garantir la scalabilité et éviter les goulets d'étranglement (Rate Limits de Riot, temps de calcul SQL), des choix architecturaux stricts ont été actés, écartant certaines idées initiales inefficaces (comme les "capteurs stupides" ou le profilage en mémoire vive).
+Pour garantir la scalabilité et éviter les goulets d'étranglement (Rate Limits de Riot, temps de calcul SQL), l'architecture repose sur une séparation stricte des couches de stockage.
 
-### 2.1. L'Approche "Data Lake" et l'Ingestion Découplée
-Le téléchargement et l'analyse de données sont deux processus strictement séparés pour éviter la perte de données en cas d'erreur.
-1.  **Moissonnage (Seed) :** Un script récupère les identifiants bruts des dernières parties.
-2.  **Worker Asynchrone (ARQ) :** Télécharge les payloads JSON (Détails et Timeline) à pleine vitesse (15 requêtes simultanées).
-3.  **Stockage Brut :** Le JSON intégral est stocké tel quel dans une colonne `JSONB` de PostgreSQL (Données froides).
-4.  **Analyse Différée :** Les scripts analytiques ou les outils de cartographie (Mapper) lisent la base de données locale sans solliciter l'API Riot.
+### 2.1. L'Approche "Data Lake" (MinIO) et les 3 Couches de Stockage
+Le système a abandonné le stockage local sur disque dur et l'encombrement de la base de données relationnelle par des JSON massifs. La donnée suit un cycle de vie strict en 3 couches :
+1.  **Absolute Cold Storage (MinIO / S3) :** Dès qu'une requête HTTP vers l'API Riot aboutit (Détails ou Timeline), le JSON brut et intégral (100% de la donnée) est poussé de manière asynchrone dans un Object Storage (MinIO). C'est la source de vérité absolue.
+2.  **Warm Storage (PostgreSQL - JSONB) :** Le JSON brut passe dans un service `DataTrimmer` qui l'ampute de 80% de son volume inutile. Ce JSON élagué est inséré dans les tables `Match` et `MatchTimeline`. Il est utilisé par le frontend pour afficher le détail d'une partie.
+3.  **Hot Storage (PostgreSQL - Relationnel) :** Le Trimmer extrait les statistiques clés (Kills, Dégâts, Économie ciblée) et les éclate en colonnes strictes dans la table `MatchParticipant`. C'est cette table, massivement indexée, qui encaisse les auto-jointures analytiques (Synergies, Big Data) sans jamais lire le JSONB.
 
-### 2.2. Modèle Relationnel et Dédoublonnage (Données Chaudes)
-Pour que le frontend réponde instantanément, les données essentielles sont extraites des JSON lors de l'ingestion et placées dans un modèle relationnel strict.
-*   **Dédoublonnage :** Une partie contenant 10 joueurs n'est enregistrée qu'une seule fois dans la table `Match`.
-*   **Table de Liaison :** La table `MatchParticipant` fait le pont entre `Match` et `Player`. C'est le cœur du système analytique.
-*   **Auto-jointures (Self-Join) :** La vue "Synergies" exploitera des requêtes SQL d'auto-jointure sur `MatchParticipant` (indexée par `puuid`, `lane`, `champion_id`) pour calculer les winrates croisés de manière algorithmique sans surcharger Python.
+### 2.2. Modèle Relationnel et Dédoublonnage
+* **Dédoublonnage :** Une partie contenant 10 joueurs n'est enregistrée qu'une seule fois dans la table `Match`.
+* **Table de Liaison :** La table `MatchParticipant` fait le pont entre `Match` et `Player`. C'est le cœur du système analytique.
+* **Auto-jointures (Self-Join) :** Les vues d'analyse croisée exploitent le SGBD pour calculer les winrates de manière algorithmique, évitant la saturation de la RAM côté serveur Python.
 
 ### 2.3. Gestion du Rate Limit et Concurrence
-L'API Riot impose une limite stricte (ex: 20 requêtes/sec, 100 requêtes/2 min).
-*   **Client HTTP Intelligent :** Le client intercepte le code HTTP 429 et met en pause de manière asynchrone le processus en lisant le header `Retry-After`.
-*   **Rafale (Burst) :** Les workers ARQ ne sont pas bridés artificiellement (pas de pause arbitraire de 2.5s). Ils consomment les jetons API à pleine vitesse jusqu'à heurter la limite, puis se mettent en pause globale.
+L'API Riot impose une limite stricte.
+* **Client HTTP Intelligent :** Intercepte le code HTTP 429 et met en pause de manière asynchrone le processus en lisant le header `Retry-After`.
+* **Résolution des accès concurrents (Anti-Deadlock) :** Pour éviter les verrous mortels PostgreSQL lors des *Bulk Upserts* par de multiples workers ARQ en parallèle, le backend trie systématiquement les listes de joueurs par ordre alphabétique de `puuid` avant l'insertion en base.
 
 ### 2.4. Routage Géographique et Résilience
-*   **Routage Continental :** L'application interroge les endpoints continentaux (`europe`, `americas`) et non régionaux, permettant la scalabilité internationale. Le `match_id` natif de Riot sert de clé primaire (ex: `EUW1_...`) et identifie implicitement la région.
-*   **Clé API Dynamique :** La configuration est conçue pour gérer la clé API via Redis. Si une erreur HTTP 403 survient, le backend se met en pause, alerte le frontend, et attend la mise à jour de la clé sans nécessiter le redémarrage des conteneurs.
+* **Routage Continental :** L'application interroge les endpoints continentaux (`europe`, `americas`). Le `match_id` natif (ex: `EUW1_...`) sert de clé primaire universelle.
+* **Sécurité de Rétention Riot (Anti-404) :** Riot purge régulièrement les Timelines anciennes. La base de données intègre un champ `timeline_status` (`PENDING`, `FETCHED`, `UNAVAILABLE`) pour garantir que les workers n'essaient pas de télécharger à l'infini une ressource qui n'existe plus.
 
-### 2.5. Orchestration de la Timeline (Les 3 Vitesses)
-La Timeline représente 90% du poids d'une partie. La télécharger de manière synchrone provoquerait un timeout.
-1.  **Vitesse 1 (Synchrone) :** Mise à jour immédiate de l'Historique (détails de base uniquement).
-2.  **Vitesse 2 (Background) :** Un worker télécharge en arrière-plan et en basse priorité les timelines des parties identifiées comme "Jungle".
-3.  **Vitesse 3 (On-Demand) :** Si l'utilisateur demande la vue Clear avant la fin de la Vitesse 2, la tâche est repriorisée.
+### 2.5. Orchestration de la Timeline (Les 3 Vitesses de l'Interface)
+1.  **Vitesse 1 (Synchrone) :** Mise à jour immédiate de l'Historique (détails de base uniquement, ignore la timeline).
+2.  **Vitesse 2 (Anticipation) :** L'ouverture d'une carte de match télécharge sa timeline en priorité absolue (P0), et place les timelines des matchs adjacents (N-1, N+1) en file d'attente (P1).
+3.  **Vitesse 3 (Rattrapage Big Data) :** Mode spécifique du Crawler (Section 13) pour hydrater la base analytique globale.
 
 ### 2.6. Architecture LLM (Assistant Contextuel - POC)
+Le système repose sur le motif **"Context Injection"** (RAG déterministe) couplé à un flux **Server-Sent Events (SSE)**.
+* L'information brute est enrichie sémantiquement par le backend (traduction des IDs en texte).
+* L'UI affiche immédiatement la donnée interceptée (SpellWidget) avant de l'envoyer encapsulée dans des balises XML strictes vers le modèle (Gemma), qui stream sa réponse en temps réel.
 
-Afin d'intégrer un assistant conversationnel (Gemma 4) sans compromettre la stabilité de l'application ni provoquer d'hallucinations, l'approche de "Tool Calling" autonome a été écartée. Le système repose sur le motif **"Context Injection"** (RAG déterministe) couplé à un flux **Server-Sent Events (SSE)**.
+---
 
 #### Le Cycle de la Donnée (Stateful SSE)
 Le flux de communication entre le frontend et le backend est asynchrone et séquentiel pour garantir une UI réactive :
@@ -360,7 +361,15 @@ Le pilotage du worker repose sur une table Singleton (`crawler_state`).
 ### 13.3. Télémétrie via Server-Sent Events (SSE)
 Pour le monitoring en temps réel, le backend expose un flux SSE (`stream-metrics`). Un soin particulier a été apporté à la gestion des sessions SQLAlchemy : la transaction est commitée à chaque itération de la boucle de streaming pour vider le cache transactionnel. Cela garantit que le tableau de bord frontend reçoit des métriques strictement à jour (requêtes, taille des files, statut) sans effet de "données fantômes".
 
-## 14. Restitution Globale du Big Data
+## 14. Ingénierie Analytique et Backfill Temporel (Snowball)
 
-### 14.1. Agrégation SQL Directe (Hot Storage)
-L'interface dispose d'une vue transversale (`GlobalChampionsView`) pour analyser les données de l'ensemble des parties ingérées, hors du prisme d'un joueur unique. Pour des raisons de performance, le calcul des métriques (Winrate, Pickrate brut) n'est pas fait en mémoire applicative. Il est délégué au moteur PostgreSQL via une requête d'agrégation native (`GROUP BY champion_id`). Le serveur backend ne fait que sérialiser le résultat, évitant ainsi le crash par saturation de la mémoire (OOM) lors de l'instanciation de milliers de modèles ORM `MatchParticipant`.
+Afin d'alimenter les futures recommandations de Draft de manière conditionnelle (ex: Probabilité de victoire si avance de +1500 Golds à 15 minutes), l'architecture extrait des métriques temporelles directement dans le Hot Storage.
+
+### 14.1. Extraction Synchronisée (DataTrimmer)
+Dès qu'une Timeline et ses Détails sont disponibles en mémoire, le Trimmer calcule dynamiquement :
+* La différence de Golds (`gold_diff_15m`) et d'Expérience (`xp_diff_15m`) entre chaque joueur et son vis-à-vis strict (rôle par rôle) à la frame exacte de la 15ème minute.
+* Le statut de `is_snowballing` (Avance de ressources critique).
+Ces données scalaires sont insérées dans `MatchParticipant` par des requêtes d'Update chirurgicales.
+
+### 14.2. Backfill Piloté par Base de Données
+Pour réhydrater un historique existant sans consommer l'API Riot, le script `backfill_from_cold.py` obéit au SGBD. Il liste les IDs présents dans PostgreSQL, se connecte au Data Lake MinIO, télécharge les JSON bruts correspondants, et exécute le Trimmer pour propager rétroactivement les nouvelles métriques d'analyse de phase de lane vers le Hot Storage.

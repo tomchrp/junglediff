@@ -1,3 +1,5 @@
+# backend/app/worker/tasks.py
+
 """
 ===============================================================================
 FICHIER : backend/app/worker/tasks.py
@@ -5,56 +7,39 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Logique métier exécutée en arrière-plan par les workers ARQ.
-Reçoit uniquement des matchs garantis (inédits et compétitifs).
+Gère l'ingestion "On-Demand" prioritaire déclenchée par l'interaction utilisateur.
 
-MODIFICATIONS RÉCENTES :
-- Lissage réseau (Jitter)
-- Téléchargement conditionnel de la timeline (fetch_timeline)
-- Correction OS (Windows/Linux) du chemin de stockage du Data Lake.
+MODIFICATIONS (PHASE 4 BIG DATA & MINIO) :
+- Remplacement du système de fichiers local par StorageService (MinIO Data Lake).
+- Intégration de l'extraction des métriques de timeline (gold_diff_15m, etc.).
+- Mise à jour intelligente des tables relationnelles (MatchParticipant) avec les
+  nouvelles statistiques analytiques.
+- Gestion robuste du timeline_status (Protection contre les erreurs 404 de Riot).
 ===============================================================================
 """
 
-import os
-import json
 import logging
 import asyncio
 import random
-from datetime import datetime
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import update, select
 from app.db.session import AsyncSessionLocal
 from app.db.models import Match, MatchTimeline, Player, MatchParticipant
 from app.services.riot_client import RiotClient
 from app.services.trimmer import DataTrimmer
+from app.services.storage_service import StorageService
 
 logger = logging.getLogger("JungleDiffWorker")
 
-# Construction d'un chemin relatif robuste (backend/data/cold_storage)
-# Évite les erreurs de permission Windows sur C:\data
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-COLD_STORAGE_DIR = os.path.join(BASE_DIR, "data", "cold_storage")
-
-async def save_to_cold_storage(match_id: str, data_type: str, data: dict) -> None:
-    """Sauvegarde les données brutes issues de l'API Riot sur un stockage persistant."""
-    try:
-        now = datetime.now()
-        folder_path = os.path.join(COLD_STORAGE_DIR, str(now.year), f"{now.month:02d}")
-        os.makedirs(folder_path, exist_ok=True)
-        
-        file_path = os.path.join(folder_path, f"{match_id}_{data_type}.json")
-        
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-            
-    except Exception as e:
-        logger.error(f"Échec de l'écriture en Cold Storage pour {match_id} ({data_type}) : {str(e)}")
-
+# Instanciation globale du service de stockage (Créera le bucket MinIO si nécessaire)
+storage_service = StorageService()
 
 async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_timeline: bool = False):
     """Tâche principale de téléchargement et d'ingestion des parties complètes."""
     riot_client: RiotClient = ctx["riot_client"]
     
     try:
-        # Lissage aléatoire (0.1 à 0.5 sec)
+        # Lissage aléatoire (0.1 à 0.5 sec) pour éviter le burst limit de Riot
         await asyncio.sleep(random.uniform(0.1, 0.5))
         
         # 1. Téléchargement Brut des détails
@@ -66,31 +51,55 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
         if queue_id not in [420, 440, 400, 490]:
             return {"status": "skipped", "reason": f"Mode de jeu ignoré ({queue_id})"}
 
-        # 2. Sécurisation et élagage des détails
-        await save_to_cold_storage(match_id, "details", match_data)
+        # 2. Sauvegarde Data Lake (Cold Storage) et élagage (Warm Storage)
+        await storage_service.upload_json(match_id, "details", match_data)
         trimmed_match = DataTrimmer.trim_match_details(match_data)
         info = trimmed_match["info"]
 
         # 3. Téléchargement et traitement CONDITIONNEL de la Timeline
         trimmed_timeline = None
+        timeline_status_val = "PENDING"
+        
         if fetch_timeline:
             await asyncio.sleep(random.uniform(0.1, 0.5))
             timeline_data = await riot_client.get_match_timeline(continent, match_id)
             if timeline_data:
-                await save_to_cold_storage(match_id, "timeline", timeline_data)
+                await storage_service.upload_json(match_id, "timeline", timeline_data)
                 trimmed_timeline = DataTrimmer.trim_match_timeline(timeline_data)
+                timeline_status_val = "FETCHED"
             else:
-                logger.warning(f"Timeline indisponible pour {match_id} malgré la demande.")
+                timeline_status_val = "UNAVAILABLE"
+                logger.warning(f"Timeline 404 (Indisponible) pour {match_id} malgré la demande.")
 
-        # 4. Insertion en Base de Données (Bulk Upsert)
+        # 4. Ingénierie Analytique (Extraction des stats Big Data à 15 minutes)
+        metrics_dict = {}
+        if trimmed_match and trimmed_timeline:
+            metrics_dict = DataTrimmer.extract_timeline_metrics(trimmed_match, trimmed_timeline)
+
+        # 5. Insertion en Base de Données (Bulk Upsert)
         async with AsyncSessionLocal() as session:
+            
+            # --- CORRECTION DE LA FAILLE ANTI-BOUCLE ---
+            # On prépare le dictionnaire de mise à jour en cas de conflit
+            update_dict = {"raw_match_data": trimmed_match}
+            
+            # On ne met à jour le statut de la timeline QUE si le worker manuel 
+            # a été explicitement mandaté pour s'en occuper. Sinon, on préserve 
+            # le statut existant (ex: FETCHED ou UNAVAILABLE) laissé par le Crawler.
+            if fetch_timeline:
+                update_dict["timeline_status"] = timeline_status_val
+
             stmt_match = insert(Match).values(
                 match_id=match_id,
                 game_version=info.get("gameVersion", "Unknown"),
                 game_duration=info.get("gameDuration", 0),
                 creation_timestamp=info.get("gameCreation", 0),
+                timeline_status=timeline_status_val, # Utilisé uniquement pour un INSERT (Nouveau match)
                 raw_match_data=trimmed_match
-            ).on_conflict_do_nothing(index_elements=['match_id'])
+            ).on_conflict_do_update(
+                index_elements=['match_id'],
+                set_=update_dict
+            )
             await session.execute(stmt_match)
             
             if trimmed_timeline:
@@ -100,7 +109,6 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
                 ).on_conflict_do_nothing(index_elements=['match_id'])
                 await session.execute(stmt_timeline)
 
-            # --- CORRECTION DU DEADLOCK ICI ---
             participants = info.get("participants", [])
             players_dict = {}
             participants_dict = {}
@@ -110,13 +118,14 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
                 if not p_puuid:
                     continue
                 
-                # L'utilisation de dictionnaires dédoublonne naturellement 
-                # si Riot envoie deux fois le même joueur par erreur
                 players_dict[p_puuid] = {
                     "puuid": p_puuid,
                     "riot_id_name": p.get("riotIdGameName", "Inconnu"),
                     "riot_id_tagline": p.get("riotIdTagline", "")
                 }
+
+                # Récupération des métriques analytiques si disponibles
+                p_metrics = metrics_dict.get(p_puuid, {})
 
                 participants_dict[p_puuid] = {
                     "match_id": match_id,
@@ -128,11 +137,15 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
                     "win": p.get("win", False),
                     "kills": p.get("kills", 0),
                     "deaths": p.get("deaths", 0),
-                    "assists": p.get("assists", 0)
+                    "assists": p.get("assists", 0),
+                    
+                    # NOUVELLES METRIQUES BIG DATA
+                    "gold_diff_15m": p_metrics.get("gold_diff_15m"),
+                    "xp_diff_15m": p_metrics.get("xp_diff_15m"),
+                    "is_snowballing": p_metrics.get("is_snowballing")
                 }
 
-            # TRI OBLIGATOIRE PAR PUUID : Garantit que tous les workers 
-            # verrouillent les lignes SQL dans le même ordre (évite le Deadlock)
+            # TRI OBLIGATOIRE PAR PUUID : Anti-Deadlock transactionnel
             players_data = [players_dict[k] for k in sorted(players_dict.keys())]
             participants_data = [participants_dict[k] for k in sorted(participants_dict.keys())]
 
@@ -149,7 +162,18 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
 
             if participants_data:
                 stmt_participants = insert(MatchParticipant).values(participants_data)
-                stmt_participants = stmt_participants.on_conflict_do_nothing(constraint='uix_match_puuid')
+                stmt_participants = stmt_participants.on_conflict_do_update(
+                    constraint='uix_match_puuid',
+                    set_=dict(
+                        win=stmt_participants.excluded.win,
+                        kills=stmt_participants.excluded.kills,
+                        deaths=stmt_participants.excluded.deaths,
+                        assists=stmt_participants.excluded.assists,
+                        gold_diff_15m=stmt_participants.excluded.gold_diff_15m,
+                        xp_diff_15m=stmt_participants.excluded.xp_diff_15m,
+                        is_snowballing=stmt_participants.excluded.is_snowballing
+                    )
+                )
                 await session.execute(stmt_participants)
 
             await session.commit()
@@ -159,9 +183,14 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
     except Exception as e:
         logger.error(f"Erreur inattendue sur {match_id}: {str(e)}")
         return {"status": "failed", "reason": str(e)}
-    
+
+
 async def process_timeline_only(ctx, match_id: str, continent: str):
-    """Tâche chirurgicale déclenchée à la volée."""
+    """
+    Tâche chirurgicale déclenchée à la volée. 
+    Maintenant capable d'enrichir la base de données Hot Storage (MatchParticipant)
+    avec les métriques analytiques calculées a posteriori.
+    """
     riot_client: RiotClient = ctx["riot_client"]
     
     try:
@@ -174,18 +203,53 @@ async def process_timeline_only(ctx, match_id: str, continent: str):
         
         timeline_data = await riot_client.get_match_timeline(continent, match_id)
         if not timeline_data:
+            # Sécurité 404 : On met à jour le statut du Match pour que le Big Data ne le réessaye plus
+            async with AsyncSessionLocal() as session:
+                await session.execute(
+                    update(Match).where(Match.match_id == match_id).values(timeline_status="UNAVAILABLE")
+                )
+                await session.commit()
             return {"status": "failed", "reason": "Timeline indisponible chez Riot"}
 
-        await save_to_cold_storage(match_id, "timeline", timeline_data)
+        # Sauvegarde Cold Storage
+        await storage_service.upload_json(match_id, "timeline", timeline_data)
         trimmed_timeline = DataTrimmer.trim_match_timeline(timeline_data)
         
         async with AsyncSessionLocal() as session:
+            # Pour calculer les métriques Big Data, nous avons besoin du JSON de match existant
+            result = await session.execute(select(Match).where(Match.match_id == match_id))
+            match_record = result.scalar_one_or_none()
+            
+            metrics_dict = {}
+            if match_record and match_record.raw_match_data:
+                metrics_dict = DataTrimmer.extract_timeline_metrics(match_record.raw_match_data, trimmed_timeline)
+                
+            # Insertion Timeline Tiède (Warm Storage)
             stmt_timeline = insert(MatchTimeline).values(
                 match_id=match_id,
                 raw_timeline_data=trimmed_timeline
             ).on_conflict_do_nothing(index_elements=['match_id'])
-            
             await session.execute(stmt_timeline)
+            
+            # Mise à jour du Flag
+            await session.execute(
+                update(Match).where(Match.match_id == match_id).values(timeline_status="FETCHED")
+            )
+            
+            # Enrichissement chirurgical du Hot Storage (Agrégations SQL futures)
+            if metrics_dict:
+                for puuid, m in metrics_dict.items():
+                    await session.execute(
+                        update(MatchParticipant)
+                        .where(MatchParticipant.match_id == match_id)
+                        .where(MatchParticipant.puuid == puuid)
+                        .values(
+                            gold_diff_15m=m.get("gold_diff_15m"),
+                            xp_diff_15m=m.get("xp_diff_15m"),
+                            is_snowballing=m.get("is_snowballing")
+                        )
+                    )
+                    
             await session.commit()
             
         return {"status": "success", "match_id": match_id}

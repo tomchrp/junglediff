@@ -1,3 +1,5 @@
+# backend/app/services/trimmer.py
+
 """
 ===============================================================================
 FICHIER : backend/app/services/trimmer.py
@@ -5,8 +7,15 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Service de traitement de données (Data Engineering).
-* MODIFICATION : Ajout des clés firstBloodKill et firstBloodAssist à la racine 
-du participant pour alimenter l'onglet Agency.
+Ce composant agit comme un filtre pour réduire drastiquement la taille des 
+JSON bruts de l'API Riot avant leur insertion en base de données (Warm Storage).
+
+MODIFICATIONS (PHASE 3 BIG DATA) :
+- trim_match_timeline : Récupération de `totalGold` et `xp` pour l'analyse
+  de phase de lane (négligés dans la version précédente).
+- extract_timeline_metrics : Nouvelle fonction d'ingénierie analytique chargée 
+  de calculer les deltas de ressources croisés (vis-à-vis) à la 15ème minute 
+  afin d'alimenter les colonnes Hot Storage de PostgreSQL.
 ===============================================================================
 """
 
@@ -16,6 +25,10 @@ class DataTrimmer:
     
     @staticmethod
     def trim_match_details(raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Nettoie le payload des détails de match pour ne conserver que l'essentiel 
+        lié aux objets, dégâts, objectifs et runes.
+        """
         if not raw_data or "info" not in raw_data:
             return {}
 
@@ -77,13 +90,11 @@ class DataTrimmer:
                 "dragonKills": p.get("dragonKills", 0),
                 "baronKills": p.get("baronKills", 0),
                 
-                # --- OBJECTIFS ET AGENCY ---
                 "damageDealtToBuildings": p.get("damageDealtToBuildings", 0),
                 "firstTowerKill": p.get("firstTowerKill", False),
                 "firstTowerAssist": p.get("firstTowerAssist", False),
                 "firstBloodKill": p.get("firstBloodKill", False),
                 "firstBloodAssist": p.get("firstBloodAssist", False),
-                # ---------------------------
                 
                 "totalDamageShieldedOnTeammates": p.get("totalDamageShieldedOnTeammates", 0),
                 "totalHealsOnTeammates": p.get("totalHealsOnTeammates", 0),
@@ -128,7 +139,6 @@ class DataTrimmer:
             except Exception:
                 pass 
                 
-            # Les statistiques de Roaming, Sauvetages et Domination sont conservées ici dynamiquement
             raw_challenges = p.get("challenges", {})
             trimmed_participant["challenges"] = {
                 k: v for k, v in raw_challenges.items() if v is not None
@@ -140,6 +150,11 @@ class DataTrimmer:
 
     @staticmethod
     def trim_match_timeline(raw_timeline: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Nettoie le payload de la timeline. Conserve exclusivement les événements
+        clés et les frames économiques. Intègre totalGold et xp pour les futures
+        analyses temporelles de lane.
+        """
         if not raw_timeline or "info" not in raw_timeline:
             return {}
 
@@ -161,6 +176,8 @@ class DataTrimmer:
                 trimmed_frame["participantFrames"][p_id] = {
                     "position": p_data.get("position"),
                     "currentGold": p_data.get("currentGold"),
+                    "totalGold": p_data.get("totalGold"), 
+                    "xp": p_data.get("xp"),               
                     "level": p_data.get("level"),
                     "minionsKilled": p_data.get("minionsKilled"),
                     "jungleMinionsKilled": p_data.get("jungleMinionsKilled"),
@@ -209,3 +226,91 @@ class DataTrimmer:
             trimmed_timeline["info"]["frames"].append(trimmed_frame)
 
         return trimmed_timeline
+
+    @staticmethod
+    def extract_timeline_metrics(trimmed_match: Dict[str, Any], trimmed_timeline: Dict[str, Any], target_minute: int = 15) -> Dict[str, Any]:
+        """
+        Extrait les métriques croisées à un instant T (15 minutes).
+        Parcourt les frames pour trouver la 15ème minute, map les rôles, 
+        calcule le delta de statistiques entre un joueur et son vis-à-vis,
+        et détermine si le joueur est en état de Snowball.
+        
+        Retourne : 
+        { "puuid_du_joueur": {"gold_diff_15m": X, "xp_diff_15m": Y, "is_snowballing": Bool} }
+        """
+        metrics = {}
+        if not trimmed_match or not trimmed_timeline:
+            return metrics
+            
+        participants = trimmed_match.get("info", {}).get("participants", [])
+        frames = trimmed_timeline.get("info", {}).get("frames", [])
+        
+        target_timestamp_ms = target_minute * 60 * 1000
+        target_frame = None
+        
+        # Identification de la frame temporelle ciblée
+        for frame in frames:
+            if frame.get("timestamp", 0) >= target_timestamp_ms:
+                target_frame = frame
+                break
+                
+        # Si la partie s'est terminée par un surrender avant 15 minutes, on prend la dernière frame disponible
+        if not target_frame and frames:
+            target_frame = frames[-1]
+            
+        if not target_frame:
+            return metrics
+            
+        # Mapping relationnel : Assigner le participantId à son rôle et son équipe
+        role_map = {}
+        participant_map = {}
+        
+        for p in participants:
+            p_id = str(p.get("participantId"))
+            team_id = p.get("teamId")
+            pos = p.get("teamPosition", "NONE")
+            puuid = p.get("puuid")
+            
+            participant_map[p_id] = {"puuid": puuid, "pos": pos, "team_id": team_id}
+            
+            if pos != "NONE" and pos != "":
+                if pos not in role_map:
+                    role_map[pos] = {}
+                role_map[pos][team_id] = p_id
+                
+        participant_frames = target_frame.get("participantFrames", {})
+        
+        # Calcul des écarts pour chaque joueur
+        for p_id_str, p_info in participant_map.items():
+            puuid = p_info["puuid"]
+            pos = p_info["pos"]
+            my_team = p_info["team_id"]
+            enemy_team = 200 if my_team == 100 else 100
+            
+            my_frame = participant_frames.get(p_id_str, {})
+            my_gold = my_frame.get("totalGold", 0)
+            my_xp = my_frame.get("xp", 0)
+            
+            gold_diff = None
+            xp_diff = None
+            
+            if pos in role_map and enemy_team in role_map[pos]:
+                enemy_p_id_str = role_map[pos][enemy_team]
+                enemy_frame = participant_frames.get(enemy_p_id_str, {})
+                enemy_gold = enemy_frame.get("totalGold", 0)
+                enemy_xp = enemy_frame.get("xp", 0)
+                
+                gold_diff = my_gold - enemy_gold
+                xp_diff = my_xp - enemy_xp
+            
+            is_snowballing = False
+            if gold_diff is not None:
+                is_snowballing = gold_diff >= 1000
+                
+            metrics[puuid] = {
+                "gold_diff_15m": gold_diff,
+                "xp_diff_15m": xp_diff,
+                "is_snowballing": is_snowballing
+            }
+            
+        return metrics

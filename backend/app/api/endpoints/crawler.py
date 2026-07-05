@@ -1,3 +1,5 @@
+# backend/app/api/endpoints/crawler.py
+
 """
 ===============================================================================
 FICHIER : backend/app/api/endpoints/crawler.py
@@ -8,6 +10,11 @@ Routeur FastAPI exposant l'API de contrôle du Crawler Big Data.
 Permet d'amorcer le crawler (Seed), de le démarrer/mettre en pause (Toggle),
 et de diffuser en temps réel les métriques d'ingestion au frontend via 
 un flux Server-Sent Events (SSE).
+
+MODIFICATIONS (PHASE 4 BIG DATA) :
+- Remplacement de la route /toggle-extraction par /set-mode.
+- Mise à jour du flux de métriques SSE pour diffuser le crawler_mode (String)
+  au lieu du booléen obsolète extraction_only.
 ===============================================================================
 """
 
@@ -76,6 +83,7 @@ async def seed_crawler_queue(
 
 @router.get("/stream-metrics")
 async def stream_crawler_metrics(db: AsyncSession = Depends(get_db)):
+    """Flux continu (SSE) pour mettre à jour le dashboard en temps réel."""
     async def event_generator():
         try:
             while True:
@@ -88,7 +96,7 @@ async def stream_crawler_metrics(db: AsyncSession = Depends(get_db)):
                 state = result_state.scalar_one_or_none()
                 
                 is_active = state.is_active if state else False
-                extraction_only = state.extraction_only if state else False
+                crawler_mode = state.crawler_mode if state else "DISCOVERY_AND_DETAILS"
                 total_requests = state.total_requests_made if state else 0
                 
                 query_players_pending = select(func.count(CrawlerQueue.puuid)).where(CrawlerQueue.status == 'PENDING')
@@ -102,7 +110,7 @@ async def stream_crawler_metrics(db: AsyncSession = Depends(get_db)):
 
                 payload = {
                     "is_active": is_active,
-                    "extraction_only": extraction_only, # Ajout obligatoire
+                    "crawler_mode": crawler_mode,
                     "total_requests": total_requests,
                     "players_pending": players_pending,
                     "matches_pending": matches_pending,
@@ -135,11 +143,21 @@ async def purge_crawler_queues(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Erreur interne du serveur")
     
 
-@router.post("/toggle-extraction", response_model=Dict[str, Any])
-async def toggle_extraction_mode(
-    extraction_only: bool = Body(..., embed=True),
+@router.post("/set-mode", response_model=Dict[str, Any])
+async def set_crawler_mode(
+    mode: str = Body(..., embed=True),
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Remplace l'ancienne route booléenne /toggle-extraction.
+    Accepte "DISCOVERY_AND_DETAILS", "DETAILS_ONLY", ou "TIMELINES_ONLY".
+    """
     service = CrawlerService(db)
-    state = await service.toggle_extraction_only(extraction_only)
-    return {"status": "success", "extraction_only": state.extraction_only}
+    try:
+        state = await service.set_crawler_mode(mode)
+        return {"status": "success", "crawler_mode": state.crawler_mode}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Erreur lors du changement de mode: {e}")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur")

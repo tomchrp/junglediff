@@ -4,112 +4,128 @@ FICHIER : backend/app/api/endpoints/global_stats.py
 PROJET  : JungleDiff
 
 DESCRIPTION :
-Routeur FastAPI dédié aux statistiques globales (Big Data).
-Interroge le Hot Storage pour les données de champions et le Cold Storage (JSONB)
-pour la ventilation absolue par type de file d'attente (queue_id).
+Routeur FastAPI dédié aux analyses globales (Big Data communautaire).
+Ces routes agrègent massivement les données du Hot Storage (MatchParticipant)
+et évaluent la santé du Data Lake (Couverture des Timelines).
 
-FONCTIONNALITÉS :
-- get_global_champions : Agrège les matchs par champion et effectue un 
-  groupement (GROUP BY) directement dans les propriétés JSON des matchs pour
-  isoler les modes de jeu (SoloQ, ARAM, Flex, etc.).
+MODIFICATIONS :
+- Ajout de /telemetry : Vérifie le ratio Matchs/Timelines en base.
+- Ajout de /snowball : Agrège les nouvelles métriques temporelles à 15 min 
+  pour valider les conditions de victoire communautaires.
 ===============================================================================
 """
 
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, cast, Integer, desc
 
 from app.db.session import get_db
-from app.db.models import MatchParticipant, Match
+from app.db.models import MatchParticipant, Match, MatchTimeline
 
 router = APIRouter()
 
-@router.get("/champions", response_model=Dict[str, Any])
-async def get_global_champions(db: AsyncSession = Depends(get_db)):
+@router.get("/telemetry", response_model=Dict[str, Any])
+async def get_system_telemetry(db: AsyncSession = Depends(get_db)):
     """
-    Récupère les statistiques de champions et lit la colonne JSON raw_match_data 
-    pour grouper les parties par type de file (queueId).
+    Exécute un comptage global des tables primaires pour évaluer la santé du Data Lake.
+    Retourne le nombre absolu de matchs, de timelines, et le pourcentage de couverture.
     """
-    try:
-        # 1. Agrégation par mode de jeu via lecture JSONB
-        # Astuce PostgreSQL : On utilise .astext pour extraire la valeur JSON 
-        # sous forme de chaîne de caractères et pouvoir la grouper.
-        queue_expr = Match.raw_match_data['info']['queueId'].astext
-        query_modes = (
-            select(
-                queue_expr.label("queue_id"),
-                func.count(Match.match_id).label("count")
-            )
-            .group_by(queue_expr)
-        )
-        
-        modes_result = await db.execute(query_modes)
-        modes_rows = modes_result.fetchall()
-        
-        # Dictionnaire de traduction des files courantes Riot
-        queue_dict = {
-            "420": "Classé Solo/Duo",
-            "440": "Classé Flex",
-            "400": "Draft Normal",
-            "450": "ARAM",
-            "430": "Aveugle Normal",
-            "490": "Partie Rapide",
-            "1700": "Arena",
-            "1900": "URF"
-        }
-        
-        modes_repartition = []
-        total_matches_in_db = 0
-        
-        for row in modes_rows:
-            q_id_str = str(row.queue_id)
-            count = row.count
-            total_matches_in_db += count
-            modes_repartition.append({
-                "queue_id": q_id_str,
-                "name": queue_dict.get(q_id_str, f"Inconnu ({q_id_str})"),
-                "count": count
-            })
-            
-        # Tri décroissant pour afficher les modes les plus joués en premier
-        modes_repartition.sort(key=lambda x: x["count"], reverse=True)
+    match_count = await db.scalar(select(func.count(Match.match_id)))
+    timeline_count = await db.scalar(select(func.count(MatchTimeline.match_id)))
+    
+    # Évite la division par zéro sur une base vierge
+    coverage = (timeline_count / match_count * 100) if match_count and match_count > 0 else 0
+    
+    return {
+        "total_matches": match_count or 0,
+        "total_timelines": timeline_count or 0,
+        "timeline_coverage_percent": round(coverage, 2)
+    }
 
-        # 2. Agrégation des champions (Hot Storage)
-        query_champs = (
-            select(
-                MatchParticipant.champion_id,
-                func.count(MatchParticipant.id).label("total_matches"),
-                func.sum(case((MatchParticipant.win == True, 1), else_=0)).label("total_wins")
-            )
-            .group_by(MatchParticipant.champion_id)
-            .order_by(func.count(MatchParticipant.id).desc())
-        )
+@router.get("/snowball", response_model=Dict[str, Any])
+async def get_snowball_metrics(db: AsyncSession = Depends(get_db)):
+    """
+    Analyse l'impact de l'économie à 15 minutes sur l'issue de la partie.
+    Calcule le winrate conditionnel (Snowball vs Behind) et identifie 
+    les champions générant le plus grand écart de ressources.
+    """
+    # 1. Analyse de la condition de victoire (Winrate si Snowball)
+    # Calcule le taux de victoire global selon l'état de l'avantage (is_snowballing)
+    winrate_query = select(
+        MatchParticipant.is_snowballing,
+        func.count(MatchParticipant.id).label('total_games'),
+        func.sum(cast(MatchParticipant.win, Integer)).label('total_wins')
+    ).where(MatchParticipant.is_snowballing.isnot(None))\
+     .group_by(MatchParticipant.is_snowballing)
+    
+    winrate_result = await db.execute(winrate_query)
+    snowball_stats = {"snowballing": None, "behind_or_even": None}
+    
+    for row in winrate_result:
+        is_snowballing, total, wins = row
+        wr = round((wins / total * 100), 2) if total > 0 else 0
+        stat_obj = {"games": total, "winrate": wr}
         
-        result_champs = await db.execute(query_champs)
-        rows_champs = result_champs.fetchall()
+        if is_snowballing:
+            snowball_stats["snowballing"] = stat_obj
+        else:
+            snowball_stats["behind_or_even"] = stat_obj
+
+    # 2. Les Gouffres à Golds (Top 5 Champions avg_gold_diff)
+    # Filtre les champions joués au moins 5 fois pour éliminer les valeurs aberrantes
+    top_gold_query = select(
+        MatchParticipant.champion_id,
+        func.count(MatchParticipant.id).label('games'),
+        func.avg(MatchParticipant.gold_diff_15m).label('avg_gold_diff')
+    ).where(MatchParticipant.gold_diff_15m.isnot(None))\
+     .group_by(MatchParticipant.champion_id)\
+     .having(func.count(MatchParticipant.id) >= 5)\
+     .order_by(desc('avg_gold_diff'))\
+     .limit(5)
+     
+    top_gold_result = await db.execute(top_gold_query)
+    top_champions = [
+        {"champion_id": row[0], "games": row[1], "avg_gold_diff": int(row[2])}
+        for row in top_gold_result
+    ]
+
+    return {
+        "winrate_analysis": snowball_stats,
+        "top_snowballers": top_champions
+    }
+
+@router.get("/champions", response_model=Dict[str, Any])
+async def get_global_champion_stats(db: AsyncSession = Depends(get_db)):
+    """
+    Agrège les statistiques globales des champions sur l'ensemble de la base.
+    Note technique : Cette requête provoquera des ralentissements massifs lorsque 
+    la base dépassera les 500k lignes. À migrer vers une Vue Matérialisée ultérieurement.
+    """
+    query = select(
+        MatchParticipant.champion_id,
+        func.count(MatchParticipant.id).label('total_games'),
+        func.sum(cast(MatchParticipant.win, Integer)).label('total_wins'),
+        func.avg(MatchParticipant.kills).label('avg_kills'),
+        func.avg(MatchParticipant.deaths).label('avg_deaths'),
+        func.avg(MatchParticipant.assists).label('avg_assists')
+    ).group_by(MatchParticipant.champion_id)
+    
+    result = await db.execute(query)
+    
+    champions_stats = []
+    for row in result:
+        total_games = row[1]
+        wins = row[2] or 0
+        champions_stats.append({
+            "champion_id": row[0],
+            "games": total_games,
+            "winrate": round((wins / total_games * 100), 2) if total_games > 0 else 0,
+            "kda": {
+                "k": round(row[3], 1),
+                "d": round(row[4], 1),
+                "a": round(row[5], 1)
+            }
+        })
         
-        champions_data = []
-        total_participations = 0
-        
-        for row in rows_champs:
-            champ_id, matches, wins = row
-            total_participations += matches
-            
-            champions_data.append({
-                "champion_id": champ_id,
-                "total_matches": matches,
-                "total_wins": wins,
-                "winrate": round((wins / matches) * 100, 1) if matches > 0 else 0
-            })
-            
-        return {
-            "status": "success",
-            "total_matches_in_db": total_matches_in_db,
-            "total_analyzed_participations": total_participations,
-            "modes_repartition": modes_repartition,
-            "champions": champions_data
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur lors de l'agrégation: {str(e)}")
+    return {"data": sorted(champions_stats, key=lambda x: x["games"], reverse=True)}

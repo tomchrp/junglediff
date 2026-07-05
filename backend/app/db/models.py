@@ -15,6 +15,8 @@ MODIFICATIONS :
 - Création de `CrawlerMatchQueue` : File d'attente des matchs à télécharger.
 - Création de `CrawlerState` : Singleton pour le pilotage (Start/Stop) et 
   le monitoring en temps réel.
+- REFACTO BIG DATA : Ajout metrics 15m (MatchParticipant), timeline_status (Match),
+  et crawler_mode (CrawlerState) remplaçant extraction_only.
 ===============================================================================
 """
 
@@ -69,6 +71,9 @@ class Match(Base):
     # FLAG DE SÉCURITÉ BIG DATA
     is_crawled = Column(Boolean, nullable=False, server_default='false', default=False)
     
+    # NOUVEAU FLAG DE RÉSOLUTION TIMELINE (Protection contre les 404 de Riot)
+    timeline_status = Column(String, nullable=False, server_default='PENDING', default='PENDING')
+    
     # Données froides TRIMMÉES
     raw_match_data = Column(JSONB, nullable=False)
 
@@ -92,6 +97,11 @@ class MatchParticipant(Base):
     kills = Column(Integer, nullable=False)
     deaths = Column(Integer, nullable=False)
     assists = Column(Integer, nullable=False)
+
+    # NOUVELLES MÉTRIQUES BIG DATA (Calculées au passage du Trimmer)
+    gold_diff_15m = Column(Integer, nullable=True)
+    xp_diff_15m = Column(Integer, nullable=True)
+    is_snowballing = Column(Boolean, nullable=True)
 
     player = relationship("Player", back_populates="match_participations")
     match = relationship("Match", back_populates="participants")
@@ -151,7 +161,11 @@ class CrawlerState(Base):
     
     id = Column(Integer, primary_key=True) # Toujours 1
     is_active = Column(Boolean, nullable=False, default=False)
-    extraction_only = Column(Boolean, nullable=False, default=False) # NOUVEL INTERRUPTEUR
+    
+    # Remplacement de extraction_only par un mode à 3 états :
+    # DISCOVERY_AND_DETAILS, DETAILS_ONLY, TIMELINES_ONLY
+    crawler_mode = Column(String, nullable=False, default="DISCOVERY_AND_DETAILS")
+    
     total_requests_made = Column(Integer, nullable=False, default=0)
     current_rate_limit_sleep = Column(Integer, nullable=False, default=0)
     started_at = Column(BigInteger, nullable=True)

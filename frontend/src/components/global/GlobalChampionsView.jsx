@@ -4,133 +4,193 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Composant de restitution visuelle du Big Data.
- * Affiche la ventilation exacte des parties ingérées selon leur mode de jeu
- * (récupéré depuis le JSONB backend) afin de garantir l'absence de pollution 
- * par des files non désirées (ARAM, Arena, etc.).
+ * Vue expérimentale de restitution Big Data communautaire.
+ * Intègre la nouvelle télémétrie du Data Lake (Vérification de l'ingestion)
+ * et les analyses avancées de Snowballing basées sur les timelines.
  * ============================================================================
  */
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { Database, Activity, TrendingUp, AlertTriangle } from 'lucide-react';
+import Avatar from '../ui/Avatar';
 
 const GlobalChampionsView = () => {
-    const [stats, setStats] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [stats, setStats] = useState([]);
+    const [telemetry, setTelemetry] = useState(null);
+    const [snowball, setSnowball] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-    /**
-     * Exécute l'appel réseau vers l'API d'agrégation.
-     */
     useEffect(() => {
-        const fetchGlobalStats = async () => {
+        const fetchAllData = async () => {
             try {
-                setLoading(true);
-                const response = await axios.get('http://localhost:8000/api/v1/global/champions');
-                setStats(response.data);
-                setError(null);
+                // Exécution en parallèle pour réduire le temps de chargement global
+                const [champsRes, telemetryRes, snowballRes] = await Promise.all([
+                    axios.get('http://localhost:8000/api/v1/global/champions'),
+                    axios.get('http://localhost:8000/api/v1/global/telemetry'),
+                    axios.get('http://localhost:8000/api/v1/global/snowball')
+                ]);
+
+                setStats(champsRes.data.data);
+                setTelemetry(telemetryRes.data);
+                setSnowball(snowballRes.data);
             } catch (err) {
-                console.error("Erreur récupération stats globales:", err);
-                setError("Impossible de charger les statistiques globales.");
+                console.error("Erreur lors de la récupération du Big Data", err);
             } finally {
-                setLoading(false);
+                setIsLoading(false);
             }
         };
 
-        fetchGlobalStats();
+        fetchAllData();
     }, []);
 
-    if (loading) {
+    if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-full p-8 text-lol-gold">
-                <p>Analyse du Big Data et extraction JSON en cours...</p>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="p-4 text-lol-loss bg-red-900/20 border border-lol-loss rounded">
-                <p>{error}</p>
-            </div>
-        );
-    }
-
-    if (!stats || stats.champions.length === 0) {
-        return (
-            <div className="p-4 text-gray-400">
-                <p>Aucune donnée disponible. Lancez le crawler pour ingérer des parties.</p>
+            <div className="flex-1 flex items-center justify-center min-h-[500px]">
+                <div className="animate-pulse text-lol-gold font-bold flex items-center gap-2">
+                    <Database className="animate-bounce" /> Agrégation des données massives...
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-full bg-surface-solid text-gray-100 p-4 overflow-y-auto custom-scrollbar">
-            <div className="mb-6 border-b border-border-glass pb-4">
-                <h2 className="text-xl font-bold text-lol-gold uppercase tracking-wider mb-4">
-                    Analyse Globale des Champions
-                </h2>
-
-                {/* Section Contrôle de Qualité des Données */}
-                <div className="bg-surface-elevated p-4 rounded border border-border-strong mb-4">
-                    <div className="flex justify-between items-center mb-3">
-                        <h3 className="text-sm font-bold text-gray-100 uppercase tracking-wider">
-                            Intégrité de la Base de Données
-                        </h3>
-                        <span className="text-xs text-lol-textMuted font-mono">
-                            Total : {stats.total_matches_in_db.toLocaleString()} matchs
-                        </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                        {stats.modes_repartition?.map((mode) => {
-                            const isLegit = ['420', '440', '400'].includes(mode.queue_id);
-
-                            return (
-                                <div
-                                    key={mode.queue_id}
-                                    className={`px-3 py-1.5 rounded flex flex-col border ${isLegit
-                                            ? 'bg-blue-900/20 border-blue-500/30 text-blue-100'
-                                            : 'bg-red-900/30 border-red-500/60 text-red-100'
-                                        }`}
-                                >
-                                    <span className="text-[10px] uppercase font-bold opacity-75">
-                                        {isLegit ? mode.name : `POLLUTION: ${mode.name}`}
-                                    </span>
-                                    <span className="font-mono font-bold text-sm">
-                                        {mode.count.toLocaleString()}
-                                    </span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
+        <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex-none p-6 pb-2 border-b border-border-glass">
+                <h1 className="text-2xl font-bold text-gray-100 flex items-center gap-3">
+                    <Database className="w-6 h-6 text-lol-gold" />
+                    Laboratoire Big Data
+                </h1>
+                <p className="text-sm text-lol-textMuted mt-1">
+                    Validation de l'ingestion asynchrone et des métriques temporelles à 15 minutes.
+                </p>
             </div>
 
-            <div className="space-y-2">
-                <div className="grid grid-cols-4 gap-4 px-2 py-1 text-xs font-bold text-lol-textMuted uppercase border-b border-border-strong">
-                    <div className="col-span-2">Champion ID</div>
-                    <div className="text-right">Matchs</div>
-                    <div className="text-right">Winrate</div>
-                </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-                {stats.champions.map((champ) => (
-                    <div
-                        key={champ.champion_id}
-                        className="grid grid-cols-4 gap-4 px-2 py-3 bg-surface-elevated border border-border-glass rounded hover:border-lol-gold/50 transition-colors items-center"
-                    >
-                        <div className="col-span-2 font-bold text-gray-200">
-                            {champ.champion_id}
+                {/* BLOC A : Télémétrie du Data Lake */}
+                {telemetry && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="glass-panel p-4 flex items-center justify-between">
+                            <div>
+                                <div className="text-sm text-gray-400 font-bold">Matchs (Hot Storage)</div>
+                                <div className="text-2xl font-bold tabular-nums text-gray-100 mt-1">
+                                    {telemetry.total_matches.toLocaleString()}
+                                </div>
+                            </div>
+                            <Activity className="w-8 h-8 text-blue-500 opacity-50" />
                         </div>
-                        <div className="text-right font-mono text-blue-400">
-                            {champ.total_matches.toLocaleString()}
+                        <div className="glass-panel p-4 flex items-center justify-between">
+                            <div>
+                                <div className="text-sm text-gray-400 font-bold">Timelines (Warm Storage)</div>
+                                <div className="text-2xl font-bold tabular-nums text-gray-100 mt-1">
+                                    {telemetry.total_timelines.toLocaleString()}
+                                </div>
+                            </div>
+                            <Database className="w-8 h-8 text-purple-500 opacity-50" />
                         </div>
-                        <div className={`text-right font-bold ${champ.winrate >= 50 ? 'text-lol-win' : 'text-lol-loss'}`}>
-                            {champ.winrate}%
+                        <div className="glass-panel p-4 flex items-center justify-between">
+                            <div>
+                                <div className="text-sm text-gray-400 font-bold">Couverture Temporelle</div>
+                                <div className={`text-2xl font-bold tabular-nums mt-1 ${telemetry.timeline_coverage_percent > 80 ? 'text-lol-win' : 'text-lol-gold'}`}>
+                                    {telemetry.timeline_coverage_percent}%
+                                </div>
+                            </div>
+                            {telemetry.timeline_coverage_percent < 100 && (
+                                <AlertTriangle className="w-6 h-6 text-lol-gold animate-pulse" title="Certaines parties n'ont pas de timeline téléchargée." />
+                            )}
                         </div>
                     </div>
-                ))}
+                )}
+
+                {/* BLOC B : Analyse du Snowball (Validation 15 minutes) */}
+                {snowball && snowball.winrate_analysis.snowballing && (
+                    <div className="glass-panel p-6 border-l-4 border-l-lol-gold">
+                        <h2 className="text-lg font-bold text-gray-100 flex items-center gap-2 mb-4">
+                            <TrendingUp className="w-5 h-5 text-lol-gold" />
+                            Impact du Snowball à 15 Minutes
+                        </h2>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Probabilité de Victoire */}
+                            <div className="space-y-4">
+                                <div className="bg-surface-elevated p-4 rounded border border-border-strong flex justify-between items-center">
+                                    <div>
+                                        <div className="font-bold text-gray-200">Avance aux Golds (≥ 1000g)</div>
+                                        <div className="text-xs text-lol-textMuted mt-1">Échantillon : {snowball.winrate_analysis.snowballing.games} parties</div>
+                                    </div>
+                                    <div className="text-3xl font-bold tabular-nums text-lol-win">
+                                        {snowball.winrate_analysis.snowballing.winrate}%
+                                    </div>
+                                </div>
+                                <div className="bg-surface-elevated p-4 rounded border border-border-strong flex justify-between items-center">
+                                    <div>
+                                        <div className="font-bold text-gray-200">Retard ou Égalité</div>
+                                        <div className="text-xs text-lol-textMuted mt-1">Échantillon : {snowball.winrate_analysis.behind_or_even?.games || 0} parties</div>
+                                    </div>
+                                    <div className="text-3xl font-bold tabular-nums text-lol-loss">
+                                        {snowball.winrate_analysis.behind_or_even?.winrate || 0}%
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Générateurs d'écart */}
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wider">Top Générateurs d'Or</h3>
+                                <div className="space-y-2">
+                                    {snowball.top_snowballers.map((champ, index) => (
+                                        <div key={champ.champion_id} className="flex items-center justify-between p-2 rounded bg-surface-elevated/50">
+                                            <div className="flex items-center gap-3">
+                                                <div className="text-gray-500 font-bold w-4">{index + 1}.</div>
+                                                <Avatar
+                                                    type="champion"
+                                                    id={champ.champion_id}
+                                                    size="sm"
+                                                />
+                                                <div className="text-xs text-gray-400">({champ.games} games)</div>
+                                            </div>
+                                            <div className="text-lol-gold font-bold tabular-nums">
+                                                +{champ.avg_gold_diff}g
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Tableau Classique (Limité aux 50 premiers pour la performance DOM) */}
+                <div className="glass-panel overflow-hidden">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-surface-elevated text-xs uppercase text-lol-textMuted border-b border-border-strong">
+                            <tr>
+                                <th className="px-6 py-4 font-bold">Champion</th>
+                                <th className="px-6 py-4 font-bold">Parties (Big Data)</th>
+                                <th className="px-6 py-4 font-bold">Winrate Moyen</th>
+                                <th className="px-6 py-4 font-bold">KDA Moyen</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-glass">
+                            {stats.slice(0, 50).map((champ) => (
+                                <tr key={champ.champion_id} className="hover:bg-surface-elevated/30 transition-colors">
+                                    <td className="px-6 py-3">
+                                        <Avatar type="champion" id={champ.champion_id} size="md" />
+                                    </td>
+                                    <td className="px-6 py-3 font-bold tabular-nums text-gray-300">
+                                        {champ.games}
+                                    </td>
+                                    <td className={`px-6 py-3 font-bold tabular-nums ${champ.winrate >= 50 ? 'text-lol-win' : 'text-lol-loss'}`}>
+                                        {champ.winrate}%
+                                    </td>
+                                    <td className="px-6 py-3 text-gray-400 tabular-nums">
+                                        {champ.kda.k} / {champ.kda.d} / {champ.kda.a}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

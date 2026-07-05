@@ -1,7 +1,21 @@
+# backend/app/services/crawler_service.py
+
 """
 ===============================================================================
 FICHIER : backend/app/services/crawler_service.py
 PROJET  : JungleDiff
+
+DESCRIPTION :
+Moteur autonome d'ingestion massive (Big Data). 
+Orchestre l'extraction des données Riot en respectant les quotas (Rate Limit).
+
+MODIFICATIONS (PHASE 4 BIG DATA & MINIO) :
+- Remplacement du mode binaire (extraction_only) par la machine à 3 états 
+  (DISCOVERY_AND_DETAILS, DETAILS_ONLY, TIMELINES_ONLY).
+- Sécurisation Absolute Cold Storage : Toute donnée API Riot est envoyée à 
+  MinIO (StorageService) AVANT le passage dans le DataTrimmer.
+- Implémentation du mode "Rattrapage" (_process_timeline_backfill) pour 
+  peupler l'ingénierie analytique (Golds/XP à 15min) sur l'historique existant.
 ===============================================================================
 """
 
@@ -14,9 +28,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
-from app.db.models import CrawlerState, CrawlerQueue, CrawlerMatchQueue, Match, Player, MatchParticipant
+from app.db.models import CrawlerState, CrawlerQueue, CrawlerMatchQueue, Match, Player, MatchParticipant, MatchTimeline
 from app.services.riot_client import RiotClient
 from app.services.trimmer import DataTrimmer
+from app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +39,7 @@ class CrawlerService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client = RiotClient(settings.RIOT_API_KEY)
+        self.storage = StorageService()
 
     async def get_or_create_state(self) -> CrawlerState:
         query = select(CrawlerState).where(CrawlerState.id == 1)
@@ -32,7 +48,7 @@ class CrawlerService:
         if state:
             await self.db.refresh(state) # Force le rechargement depuis la DB
         else:
-            state = CrawlerState(id=1, is_active=False, extraction_only=False, total_requests_made=0)
+            state = CrawlerState(id=1, is_active=False, crawler_mode="DISCOVERY_AND_DETAILS", total_requests_made=0)
             self.db.add(state)
             await self.db.commit()
             await self.db.refresh(state)
@@ -43,6 +59,19 @@ class CrawlerService:
         state.is_active = is_active
         if is_active and not state.started_at:
             state.started_at = int(time.time() * 1000)
+        await self.db.commit()
+        return state
+
+    async def set_crawler_mode(self, mode: str) -> CrawlerState:
+        """
+        Remplace toggle_extraction_only. Pilote la vitesse d'ingestion.
+        """
+        valid_modes = ["DISCOVERY_AND_DETAILS", "DETAILS_ONLY", "TIMELINES_ONLY"]
+        if mode not in valid_modes:
+            raise ValueError(f"Mode invalide. Choix acceptés : {valid_modes}")
+            
+        state = await self.get_or_create_state()
+        state.crawler_mode = mode
         await self.db.commit()
         return state
 
@@ -68,8 +97,13 @@ class CrawlerService:
         await self.db.commit()
 
     async def process_next_player(self) -> Optional[str]:
+        """
+        Explore le profil d'un joueur pour récupérer ses Match IDs.
+        Ignoré si le crawler est en mode rattrapage de Timelines.
+        """
         state = await self.get_or_create_state()
-        if not state.is_active: return None
+        if not state.is_active or state.crawler_mode == "TIMELINES_ONLY": 
+            return None
 
         query = text("SELECT puuid FROM crawler_queue WHERE status = 'PENDING' ORDER BY discovered_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED")
         result = await self.db.execute(query)
@@ -83,17 +117,15 @@ class CrawlerService:
         try:
             routing = self.client.get_routing("EUW")
             
-            # TRIPLE APPEL (Alignement avec sync_service)
-            # Ciblage strict : Draft (400), SoloQ (420), Flex (440)
+            # TRIPLE APPEL (Ciblage strict : Draft, SoloQ, Flex)
             api_tasks = [
                 self.client.get_match_ids(routing["continent"], target_puuid, queue=420, count=20),
                 self.client.get_match_ids(routing["continent"], target_puuid, queue=440, count=20),
                 self.client.get_match_ids(routing["continent"], target_puuid, queue=400, count=20)
             ]
             
-            
             lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
-            state.total_requests_made += 3 # On a fait 3 requêtes
+            state.total_requests_made += 3
             
             # Fusion et dédoublonnage
             all_fetched_ids = set()
@@ -117,6 +149,7 @@ class CrawlerService:
             await self.db.execute(update(CrawlerQueue).where(CrawlerQueue.puuid == target_puuid).values(status="COMPLETED"))
             await self.db.commit()
             return target_puuid
+            
         except Exception as e:
             logger.error(f"Crawler Player Error ({target_puuid}): {e}")
             await self.db.execute(update(CrawlerQueue).where(CrawlerQueue.puuid == target_puuid).values(status="FAILED"))
@@ -128,21 +161,89 @@ class CrawlerService:
         await self.db.execute(text("TRUNCATE TABLE crawler_queue, crawler_match_queue RESTART IDENTITY"))
         await self.db.commit()
 
-    async def toggle_extraction_only(self, extraction_only: bool) -> CrawlerState:
-        """Active ou désactive le bridage de l'exploration."""
-        state = await self.get_or_create_state()
-        state.extraction_only = extraction_only
-        await self.db.commit()
-        return state
 
     async def process_next_match(self) -> Optional[str]:
+        """Aiguilleur principal de la donnée de match selon le mode actif."""
         state = await self.get_or_create_state()
-        await self.db.refresh(state)
-        logger.info(f"DEBUG - Mode Extraction Only actif: {state.extraction_only}") # <--- AJOUTE CECI
-
-        
         if not state.is_active: return None
 
+        logger.info(f"DEBUG - Mode Crawler Actif: {state.crawler_mode}")
+
+        if state.crawler_mode == "TIMELINES_ONLY":
+            return await self._process_timeline_backfill(state)
+        else:
+            return await self._process_details_ingestion(state)
+
+
+    async def _process_timeline_backfill(self, state: CrawlerState) -> Optional[str]:
+        """
+        Nouveau Mode : Scanne la base à la recherche de matchs orphelins de timeline.
+        Télécharge, extrait l'économie à 15 minutes, et met à jour le modèle relationnel.
+        """
+        query = text("SELECT match_id FROM matches WHERE is_crawled = true AND timeline_status = 'PENDING' LIMIT 1 FOR UPDATE SKIP LOCKED")
+        result = await self.db.execute(query)
+        row = result.fetchone()
+        if not row: return None
+
+        target_match_id = row[0]
+        
+        try:
+            routing = self.client.get_routing("EUW")
+            timeline_data = await self.client.get_match_timeline(routing["continent"], target_match_id)
+            state.total_requests_made += 1
+
+            if not timeline_data:
+                # SÉCURITÉ 404 RIOT
+                await self.db.execute(update(Match).where(Match.match_id == target_match_id).values(timeline_status="UNAVAILABLE"))
+                await self.db.commit()
+                return f"{target_match_id} (TIMELINES_ONLY - 404 UNAVAILABLE)"
+
+            # INJECTION COLD STORAGE
+            await self.storage.upload_json(target_match_id, "timeline", timeline_data)
+            
+            # ELAGAGE
+            trimmed_timeline = DataTrimmer.trim_match_timeline(timeline_data)
+
+            # EXTRACTION DES STATS 15 MIN
+            match_result = await self.db.execute(select(Match).where(Match.match_id == target_match_id))
+            match_record = match_result.scalar_one_or_none()
+
+            metrics_dict = {}
+            if match_record and match_record.raw_match_data:
+                metrics_dict = DataTrimmer.extract_timeline_metrics(match_record.raw_match_data, trimmed_timeline)
+
+            # INJECTION WARM STORAGE
+            new_timeline = MatchTimeline(match_id=target_match_id, raw_timeline_data=trimmed_timeline)
+            self.db.add(new_timeline)
+
+            # MISE À JOUR HOT STORAGE (Métriques)
+            if metrics_dict:
+                for puuid, m in metrics_dict.items():
+                    await self.db.execute(
+                        update(MatchParticipant)
+                        .where(MatchParticipant.match_id == target_match_id)
+                        .where(MatchParticipant.puuid == puuid)
+                        .values(
+                            gold_diff_15m=m.get("gold_diff_15m"),
+                            xp_diff_15m=m.get("xp_diff_15m"),
+                            is_snowballing=m.get("is_snowballing")
+                        )
+                    )
+
+            # FERMETURE DU CIRCUIT
+            await self.db.execute(update(Match).where(Match.match_id == target_match_id).values(timeline_status="FETCHED"))
+            await self.db.commit()
+            
+            return f"{target_match_id} (TIMELINES_ONLY - SUCCESS)"
+
+        except Exception as e:
+            logger.error(f"Crawler Timeline Error ({target_match_id}): {e}")
+            await self.db.rollback()
+            return None
+
+
+    async def _process_details_ingestion(self, state: CrawlerState) -> Optional[str]:
+        """Mode historique : Dépile la CrawlerMatchQueue et ingère la structure de base."""
         query = text("SELECT match_id FROM crawler_match_queue WHERE status = 'PENDING' ORDER BY discovered_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED")
         result = await self.db.execute(query)
         row = result.fetchone()
@@ -153,7 +254,6 @@ class CrawlerService:
         await self.db.commit()
 
         try:
-            # Vérification de l'existence (Cold Storage)
             exist_query = select(Match.raw_match_data).where(Match.match_id == target_match_id)
             existing_match_data = (await self.db.execute(exist_query)).scalar_one_or_none()
             
@@ -168,21 +268,24 @@ class CrawlerService:
                 if not raw_match or "info" not in raw_match:
                     raise ValueError("Payload Match Details invalide")
 
+                # INJECTION COLD STORAGE STRICTE
+                await self.storage.upload_json(target_match_id, "details", raw_match)
+
                 trimmer = DataTrimmer()
                 trimmed_match = trimmer.trim_match_details(raw_match)
                 
-                # INJECTION COLD STORAGE
+                # INJECTION WARM STORAGE
                 new_db_match = Match(
                     match_id=target_match_id,
                     game_version=trimmed_match["info"].get("gameVersion", "unknown"),
                     game_duration=trimmed_match["info"].get("gameDuration", 0),
                     creation_timestamp=trimmed_match["info"].get("gameCreation", 0),
                     is_crawled=True,
-                    raw_match_data=trimmed_match
+                    raw_match_data=trimmed_match,
+                    timeline_status="PENDING" # Préparation pour le backfill futur
                 )
                 self.db.add(new_db_match)
 
-            # EXTRACTION DES JOUEURS (HOT STORAGE + SNOWBALLING)
             current_time = int(time.time() * 1000)
             participants = trimmed_match.get("info", {}).get("participants", [])
             
@@ -190,7 +293,7 @@ class CrawlerService:
                 p_puuid = participant.get("puuid")
                 if not p_puuid: continue
 
-                # 1. Vérifier si le joueur est connu dans le système global
+                # 1. Joueur Global
                 player_exist = await self.db.execute(select(Player.puuid).where(Player.puuid == p_puuid))
                 is_new_player = not player_exist.scalar_one_or_none()
 
@@ -202,14 +305,13 @@ class CrawlerService:
                     )
                     self.db.add(new_player)
                     
-                # 2. BRIDAGE ET SNOWBALLING (Désormais indépendant de is_new_player)
-                if not state.extraction_only:
-                    # Vérification SQL propre : le joueur est-il déjà dans la file d'attente ?
+                # 2. Snowballing exclusif au mode DISCOVERY
+                if state.crawler_mode == "DISCOVERY_AND_DETAILS":
                     queue_exist = await self.db.execute(select(CrawlerQueue.puuid).where(CrawlerQueue.puuid == p_puuid))
                     if not queue_exist.scalar_one_or_none():
                         self.db.add(CrawlerQueue(puuid=p_puuid, status="PENDING", discovery_depth=1, discovered_at=current_time))
 
-                # 3. INJECTION HOT STORAGE (MatchParticipant)
+                # 3. Injection Hot Storage
                 mp_exist = await self.db.execute(select(MatchParticipant.id).where(MatchParticipant.match_id == target_match_id).where(MatchParticipant.puuid == p_puuid))
                 if not mp_exist.scalar_one_or_none():
                     new_mp = MatchParticipant(

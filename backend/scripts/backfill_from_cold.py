@@ -4,102 +4,130 @@ FICHIER : backend/scripts/backfill_from_cold.py
 PROJET  : JungleDiff
 
 DESCRIPTION :
-Script de réhydratation (Backfill) autonome.
-Parcourt récursivement le dossier 'cold_storage' pour récupérer les payloads 
-JSON bruts de l'API Riot. Applique la dernière version du DataTrimmer et 
-met à jour la colonne JSONB de PostgreSQL sans solliciter l'API Riot ni 
-altérer les métadonnées existantes.
-* CORRECTION : Ajout du chargement explicite des variables d'environnement 
-avant l'initialisation de l'ORM pour éviter les crashs de Pydantic Settings.
+Script de réhydratation (Backfill) autonome connecté au Data Lake (MinIO).
+Ce script a été repensé pour être piloté par la base de données (PostgreSQL) 
+plutôt que par le système de fichiers ou le bucket S3. Il télécharge les JSON 
+bruts depuis MinIO uniquement pour les matchs existants en base, applique le 
+DataTrimmer, et calcule les métriques analytiques à 15 minutes pour enrichir 
+la table MatchParticipant (Hot Storage).
 ===============================================================================
 """
 
 import os
 import sys
-import json
 import asyncio
-from pathlib import Path
-from sqlalchemy import update
+import logging
 from dotenv import load_dotenv
+from sqlalchemy import select, update
 
-# 1. Définition des chemins absolus
+# Configuration des chemins et environnement
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-COLD_STORAGE_DIR = os.path.join(BACKEND_DIR, "data", "cold_storage")
-
-# 2. Chargement explicite du fichier .env du backend
-env_path = os.path.join(BACKEND_DIR, ".env")
-load_dotenv(env_path)
-
-# 3. Ajout au PYTHONPATH pour permettre l'import des modules "app"
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 sys.path.append(BACKEND_DIR)
 
 from app.db.session import AsyncSessionLocal
-from app.db.models import Match, MatchTimeline
+from app.db.models import Match, MatchTimeline, MatchParticipant
 from app.services.trimmer import DataTrimmer
+from app.services.storage_service import StorageService
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("Backfill")
 
 async def run_backfill():
     """
-    Orchestre la lecture des fichiers froids et la mise à jour transactionnelle
-    de la base de données.
-    """
-    print(f"Démarrage du Backfill depuis : {COLD_STORAGE_DIR}")
+    Orchestre la réhydratation des données existantes.
     
-    if not os.path.exists(COLD_STORAGE_DIR):
-        print("Erreur : Le dossier cold_storage n'existe pas.")
-        return
-
-    files = list(Path(COLD_STORAGE_DIR).rglob("*.json"))
-    total_files = len(files)
-    print(f"{total_files} fichiers trouvés. Analyse en cours...\n")
-
-    matches_updated = 0
-    timelines_updated = 0
-    errors = 0
+    Fonctionnement :
+    1. Interroge la table Match pour obtenir la liste exhaustive des parties.
+    2. Pour chaque identifiant, tente de télécharger les détails et la timeline depuis MinIO.
+    3. Applique le trimming sur les données récupérées.
+    4. Si les deux JSON sont présents, déclenche l'extraction des métriques de snowball 
+       et met à jour la table MatchParticipant.
+    5. Effectue des commits par lots (batch) pour préserver la mémoire vive.
+    """
+    logger.info("Démarrage du Backfill via MinIO (Piloté par PostgreSQL)...")
+    storage = StorageService()
 
     async with AsyncSessionLocal() as session:
-        for idx, file_path in enumerate(files, 1):
-            filename = file_path.name
-            
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    raw_data = json.load(f)
-                
-                parts = filename.split("_")
-                if len(parts) < 3:
-                    continue
-                
-                match_id = f"{parts[0]}_{parts[1]}"
-                data_type = parts[2].replace(".json", "")
+        # Récupération de tous les ID de matchs existants en base
+        result = await session.execute(select(Match.match_id))
+        match_ids = [row[0] for row in result.fetchall()]
+        total_matches = len(match_ids)
+        
+        logger.info(f"{total_matches} matchs identifiés en base. Début du traitement.")
 
-                if data_type == "details":
-                    trimmed = DataTrimmer.trim_match_details(raw_data)
-                    if trimmed:
-                        stmt = update(Match).where(Match.match_id == match_id).values(raw_match_data=trimmed)
-                        await session.execute(stmt)
+        matches_updated = 0
+        timelines_updated = 0
+        metrics_updated = 0
+        errors = 0
+
+        for idx, match_id in enumerate(match_ids, 1):
+            try:
+                # Téléchargement asynchrone depuis MinIO
+                raw_details = await storage.download_json(match_id, "details")
+                raw_timeline = await storage.download_json(match_id, "timeline")
+
+                trimmed_match = None
+                trimmed_timeline = None
+
+                # Traitement des détails
+                if raw_details:
+                    trimmed_match = DataTrimmer.trim_match_details(raw_details)
+                    if trimmed_match:
+                        await session.execute(
+                            update(Match)
+                            .where(Match.match_id == match_id)
+                            .values(raw_match_data=trimmed_match)
+                        )
                         matches_updated += 1
-                        
-                elif data_type == "timeline":
-                    trimmed = DataTrimmer.trim_match_timeline(raw_data)
-                    if trimmed:
-                        stmt = update(MatchTimeline).where(MatchTimeline.match_id == match_id).values(raw_timeline_data=trimmed)
-                        await session.execute(stmt)
+
+                # Traitement de la timeline
+                if raw_timeline:
+                    trimmed_timeline = DataTrimmer.trim_match_timeline(raw_timeline)
+                    if trimmed_timeline:
+                        await session.execute(
+                            update(MatchTimeline)
+                            .where(MatchTimeline.match_id == match_id)
+                            .values(raw_timeline_data=trimmed_timeline)
+                        )
                         timelines_updated += 1
-                        
-                if idx % 100 == 0:
-                    print(f"Progression : {idx}/{total_files} fichiers traités...")
-                    
+
+                # Extraction et mise à jour des métriques Big Data
+                if trimmed_match and trimmed_timeline:
+                    metrics_dict = DataTrimmer.extract_timeline_metrics(trimmed_match, trimmed_timeline)
+                    if metrics_dict:
+                        for puuid, m in metrics_dict.items():
+                            await session.execute(
+                                update(MatchParticipant)
+                                .where(MatchParticipant.match_id == match_id)
+                                .where(MatchParticipant.puuid == puuid)
+                                .values(
+                                    gold_diff_15m=m.get("gold_diff_15m"),
+                                    xp_diff_15m=m.get("xp_diff_15m"),
+                                    is_snowballing=m.get("is_snowballing")
+                                )
+                            )
+                        metrics_updated += 1
+
+                # Commit par lots pour éviter de saturer la mémoire transactionnelle
+                if idx % 50 == 0:
+                    await session.commit()
+                    logger.info(f"Progression : {idx}/{total_matches} matchs traités...")
+
             except Exception as e:
-                print(f"Erreur sur le fichier {filename}: {str(e)}")
+                logger.error(f"Erreur sur le match {match_id}: {str(e)}")
+                await session.rollback()
                 errors += 1
 
-        print("\nApplication des modifications en base de données...")
+        # Commit final
         await session.commit()
 
-    print("\n--- Bilan du Backfill ---")
-    print(f"Match Details mis à jour : {matches_updated}")
-    print(f"Timelines mises à jour   : {timelines_updated}")
-    print(f"Erreurs rencontrées      : {errors}")
-    print("Opération terminée avec succès.")
+    logger.info("--- Bilan du Backfill ---")
+    logger.info(f"Match Details mis à jour : {matches_updated}")
+    logger.info(f"Timelines mises à jour   : {timelines_updated}")
+    logger.info(f"Matchs enrichis (Métriques) : {metrics_updated}")
+    logger.info(f"Erreurs rencontrées      : {errors}")
+    logger.info("Opération terminée avec succès.")
 
 if __name__ == "__main__":
     if sys.platform == 'win32':
