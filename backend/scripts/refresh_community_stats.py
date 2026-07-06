@@ -1,5 +1,3 @@
-# backend/scripts/refresh_community_stats.py
-
 """
 ===============================================================================
 FICHIER : backend/scripts/refresh_community_stats.py
@@ -7,17 +5,16 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Script ETL (Extract, Transform, Load) autonome. 
-Il a pour rôle de recalculer l'entièreté des statistiques communautaires basées 
-sur le temps. Il vide la table d'agrégation `global_champion_time_stats` puis 
-exécute une requête de regroupement massive sur les données transactionnelles 
-historiques.
+Ce script a été refondu suite à l'adoption des Vues Matérialisées (Materialized Views).
+Il n'effectue plus de requêtes TRUNCATE ni de calculs lourds en mémoire. 
+Son unique rôle est d'ordonner à PostgreSQL de rafraîchir les vues matérialisées 
+en arrière-plan (CONCURRENTLY), permettant aux utilisateurs de continuer à 
+consulter l'application sans aucune interruption de service ni verrouillage de table.
 
 MODIFICATIONS :
-- Correction des noms de tables dans la requête SQL brute (`match_participants` 
-  au lieu de `matchparticipant`, `matches` au lieu de `match`) pour correspondre
-  au schéma SQLAlchemy.
-- Séparation des instructions SQL (TRUNCATE et INSERT) en deux appels distincts
-  pour respecter les contraintes strictes du driver asynchrone asyncpg.
+- Suppression des requêtes d'insertion manuelles.
+- Ajout de l'exécution avec un niveau d'isolation AUTOCOMMIT (Requis par PostgreSQL 
+  pour l'instruction CONCURRENTLY qui refuse d'être exécutée dans une transaction).
 ===============================================================================
 """
 
@@ -37,43 +34,39 @@ logger = logging.getLogger("RefreshCommunityStats")
 
 async def refresh_global_stats():
     """
-    Exécute la purge et le repeuplement de la table d'agrégation globale.
+    Déclenche le rafraîchissement à chaud des vues matérialisées d'analyse croisée.
     
-    Déroulement :
-    1. Exécute un TRUNCATE pour vider la table cible instantanément.
-    2. Exécute un INSERT ... SELECT pour croiser les tables `match_participants` et `matches`.
-    3. Utilise FLOOR(game_duration / 300) * 5 pour regrouper par fenêtres de 5 minutes.
+    L'utilisation de CONCURRENTLY oblige à contourner le gestionnaire de transaction 
+    classique de SQLAlchemy. Nous récupérons le moteur asynchrone sous-jacent et 
+    forçons le mode AUTOCOMMIT pour éviter l'erreur PostgreSQL 
+    "CONCURRENTLY cannot run inside a transaction block".
     """
-    logger.info("Début du rafraîchissement des statistiques communautaires globales...")
+    logger.info("Début du rafraîchissement des vues matérialisées (Matchups & Synergies)...")
 
-    sql_truncate = text("TRUNCATE TABLE global_champion_time_stats;")
-    
-    # Correction stricte des noms de tables : match_participants et matches
-    sql_insert = text("""
-        INSERT INTO global_champion_time_stats (champion_id, lane, duration_bucket, matches_count, wins_count)
-        SELECT
-            mp.champion_id,
-            mp.lane,
-            CAST(FLOOR(m.game_duration / 300.0) * 5 AS INTEGER) AS duration_bucket,
-            CAST(COUNT(*) AS INTEGER) AS matches_count,
-            CAST(SUM(CASE WHEN mp.win THEN 1 ELSE 0 END) AS INTEGER) AS wins_count
-        FROM match_participants mp
-        JOIN matches m ON mp.match_id = m.match_id
-        WHERE m.game_duration > 0
-        GROUP BY mp.champion_id, mp.lane, CAST(FLOOR(m.game_duration / 300.0) * 5 AS INTEGER);
-    """)
+    # Requêtes de rafraîchissement à chaud
+    sql_refresh_matchups = text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_community_matchups;")
+    sql_refresh_synergies = text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_community_synergies;")
+
+    # Extraction du moteur sous-jacent depuis la fabrique de session
+    engine = AsyncSessionLocal.kw['bind']
 
     try:
-        async with AsyncSessionLocal() as session:
-            # L'exécution doit être séquentielle et séparée pour le driver asyncpg
-            await session.execute(sql_truncate)
-            await session.execute(sql_insert)
+        # Ouverture d'une connexion directe hors du bloc transactionnel standard
+        async with engine.connect() as conn:
+            # Passage de la connexion en AUTOCOMMIT strict
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
             
-            # Commit global de la transaction
-            await session.commit()
-            logger.info("Rafraîchissement terminé avec succès. Les données communautaires sont à jour.")
+            logger.info("Mise à jour de mv_community_matchups en cours...")
+            await conn.execute(sql_refresh_matchups)
+            logger.info("Mise à jour de mv_community_matchups terminée.")
+
+            logger.info("Mise à jour de mv_community_synergies en cours...")
+            await conn.execute(sql_refresh_synergies)
+            logger.info("Mise à jour de mv_community_synergies terminée.")
+
+        logger.info("Rafraîchissement global terminé avec succès. L'application dispose des dernières données.")
     except Exception as e:
-        logger.error(f"Erreur critique lors de l'agrégation des données : {str(e)}")
+        logger.error(f"Erreur critique lors du rafraîchissement des vues : {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":

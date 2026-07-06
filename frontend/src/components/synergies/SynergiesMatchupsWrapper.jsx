@@ -4,10 +4,12 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Contrôleur de la vue Synergies et Matchups.
+ * Contrôleur de la vue Synergies et Matchups. Il orchestre la récupération
+ * des données, gère les états de filtrage et transmet les props aux grilles
+ * et graphiques.
  * * MODIFICATIONS :
- * - Ajout de la coloration conditionnelle pour les pourcentages de victoire
- * (Joueur et Communauté) affichés dans l'en-tête de la console d'analyse.
+ * - Correction d'une erreur de référence fantôme. L'application utilise 
+ * exclusivement l'utilitaire getWinrateColorClass pour colorer les pourcentages.
  * ============================================================================
  */
 import React, { useState, useEffect, useRef } from 'react';
@@ -25,6 +27,11 @@ const LANE_NAMES = {
     UTILITY: 'SUPPORT'
 };
 
+/**
+ * Détermine la classe CSS de couleur textuelle en fonction du taux de victoire.
+ * @param {number} wr - Le winrate à évaluer.
+ * @returns {string} La classe Tailwind correspondante (victoire ou défaite).
+ */
 const getWinrateColorClass = (wr) => {
     return wr >= 50 ? 'text-lol-win' : 'text-lol-loss';
 };
@@ -49,6 +56,15 @@ export default function SynergiesMatchupsWrapper({
         selectedChampionIdRef.current = selectedMatchup?.champion_id;
     }, [selectedMatchup]);
 
+    /**
+     * Gère la récupération asynchrone des données d'analyse croisée et la 
+     * persistance de la sélection utilisateur.
+     * Cette fonction construit l'URL avec les paramètres dynamiques,
+     * gère l'annulation des requêtes obsolètes en plein vol (AbortController),
+     * met à jour le state des données, puis tente de retrouver et restaurer 
+     * le champion précédemment sélectionné dans le nouveau set de données 
+     * pour éviter que le panneau de détail ne se ferme inopinément.
+     */
     useEffect(() => {
         if (laneFilter === 'ALL') return;
 
@@ -102,6 +118,12 @@ export default function SynergiesMatchupsWrapper({
         return () => abortController.abort();
     }, [puuid, laneFilter, activeSubView, timeFilter, recentCount, selectedChampion]);
 
+    /**
+     * Construit dynamiquement le titre descriptif du panneau de détail.
+     * Interroge le dictionnaire des champions et croise la position du joueur
+     * avec la position de la cible pour générer une phrase sémantique lisible
+     * indiquant si la relation est une synergie (allié) ou un matchup (ennemi).
+     */
     const getContextualTitle = () => {
         if (!selectedMatchup) return "";
 
@@ -176,8 +198,8 @@ export default function SynergiesMatchupsWrapper({
                                         {' '}(<span className={`font-bold ${getWinrateColorClass(selectedMatchup.player_stats.winrate)}`}>{selectedMatchup.player_stats.winrate.toFixed(1)}%</span>)
                                     </span>
                                     <span className="text-border-glass">|</span>
-                                    <span title="Référentiel global du champion (Indépendant du matchup)">
-                                        Global Champion : <span className="text-white font-bold">{globalMatches} parties</span>
+                                    <span title="Référentiel exact de cette paire (Indépendant du joueur)">
+                                        Communauté : <span className="text-white font-bold">{globalMatches} parties</span>
                                         {' '}(<span className={`font-bold ${getWinrateColorClass(globalWinrate)}`}>{globalWinrate}%</span>)
                                     </span>
                                 </p>

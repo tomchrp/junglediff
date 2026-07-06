@@ -6,12 +6,13 @@ PROJET  : JungleDiff
 DESCRIPTION :
 Routeur FastAPI dédié aux analyses globales (Big Data communautaire).
 Ces routes agrègent massivement les données du Hot Storage (MatchParticipant)
-et évaluent la santé du Data Lake (Couverture des Timelines).
+et évaluent la santé du Data Lake.
 
 MODIFICATIONS :
-- Ajout de /telemetry : Vérifie le ratio Matchs/Timelines en base.
-- Ajout de /snowball : Agrège les nouvelles métriques temporelles à 15 min 
-  pour valider les conditions de victoire communautaires.
+- Modification de la route /champions : L'agrégation SQL se fait désormais 
+  par champion_id ET par lane. Le backend reconstruit ensuite un dictionnaire 
+  complet pour fournir la répartition volumétrique des rôles (lanes) par champion,
+  permettant de diagnostiquer les anomalies de classification de l'API Riot.
 ===============================================================================
 """
 
@@ -50,8 +51,6 @@ async def get_snowball_metrics(db: AsyncSession = Depends(get_db)):
     Calcule le winrate conditionnel (Snowball vs Behind) et identifie 
     les champions générant le plus grand écart de ressources.
     """
-    # 1. Analyse de la condition de victoire (Winrate si Snowball)
-    # Calcule le taux de victoire global selon l'état de l'avantage (is_snowballing)
     winrate_query = select(
         MatchParticipant.is_snowballing,
         func.count(MatchParticipant.id).label('total_games'),
@@ -72,8 +71,6 @@ async def get_snowball_metrics(db: AsyncSession = Depends(get_db)):
         else:
             snowball_stats["behind_or_even"] = stat_obj
 
-    # 2. Les Gouffres à Golds (Top 5 Champions avg_gold_diff)
-    # Filtre les champions joués au moins 5 fois pour éliminer les valeurs aberrantes
     top_gold_query = select(
         MatchParticipant.champion_id,
         func.count(MatchParticipant.id).label('games'),
@@ -98,34 +95,61 @@ async def get_snowball_metrics(db: AsyncSession = Depends(get_db)):
 @router.get("/champions", response_model=Dict[str, Any])
 async def get_global_champion_stats(db: AsyncSession = Depends(get_db)):
     """
-    Agrège les statistiques globales des champions sur l'ensemble de la base.
-    Note technique : Cette requête provoquera des ralentissements massifs lorsque 
-    la base dépassera les 500k lignes. À migrer vers une Vue Matérialisée ultérieurement.
+    Agrège les statistiques globales des champions et leur distribution spatiale.
+    
+    Cette fonction interroge la base de données en groupant par champion ET par lane.
+    Elle reconstruit ensuite en mémoire un dictionnaire unifié par champion, 
+    calculant le KDA et le Winrate global via des moyennes pondérées tout en 
+    conservant le détail du volume de jeu par rôle (dictionnaire 'lanes').
     """
     query = select(
         MatchParticipant.champion_id,
-        func.count(MatchParticipant.id).label('total_games'),
-        func.sum(cast(MatchParticipant.win, Integer)).label('total_wins'),
-        func.avg(MatchParticipant.kills).label('avg_kills'),
-        func.avg(MatchParticipant.deaths).label('avg_deaths'),
-        func.avg(MatchParticipant.assists).label('avg_assists')
-    ).group_by(MatchParticipant.champion_id)
+        MatchParticipant.lane,
+        func.count(MatchParticipant.id).label('games'),
+        func.sum(cast(MatchParticipant.win, Integer)).label('wins'),
+        func.sum(MatchParticipant.kills).label('total_kills'),
+        func.sum(MatchParticipant.deaths).label('total_deaths'),
+        func.sum(MatchParticipant.assists).label('total_assists')
+    ).group_by(MatchParticipant.champion_id, MatchParticipant.lane)
     
     result = await db.execute(query)
     
-    champions_stats = []
+    # Étape 1 : Construction du dictionnaire consolidé
+    champions_dict = {}
     for row in result:
-        total_games = row[1]
-        wins = row[2] or 0
-        champions_stats.append({
-            "champion_id": row[0],
-            "games": total_games,
-            "winrate": round((wins / total_games * 100), 2) if total_games > 0 else 0,
-            "kda": {
-                "k": round(row[3], 1),
-                "d": round(row[4], 1),
-                "a": round(row[5], 1)
+        c_id, lane, games, wins, tkills, tdeaths, tassists = row
+        
+        if c_id not in champions_dict:
+            champions_dict[c_id] = {
+                "total_games": 0,
+                "total_wins": 0,
+                "total_kills": 0,
+                "total_deaths": 0,
+                "total_assists": 0,
+                "lanes": {}
             }
+        
+        champions_dict[c_id]["total_games"] += games
+        champions_dict[c_id]["total_wins"] += (wins or 0)
+        champions_dict[c_id]["total_kills"] += (tkills or 0)
+        champions_dict[c_id]["total_deaths"] += (tdeaths or 0)
+        champions_dict[c_id]["total_assists"] += (tassists or 0)
+        champions_dict[c_id]["lanes"][lane] = games
+
+    # Étape 2 : Formatage en pourcentages et moyennes pour le frontend
+    champions_stats = []
+    for c_id, data in champions_dict.items():
+        tg = data["total_games"]
+        champions_stats.append({
+            "champion_id": c_id,
+            "games": tg,
+            "winrate": round((data["total_wins"] / tg * 100), 2) if tg > 0 else 0,
+            "kda": {
+                "k": round(data["total_kills"] / tg, 1) if tg > 0 else 0,
+                "d": round(data["total_deaths"] / tg, 1) if tg > 0 else 0,
+                "a": round(data["total_assists"] / tg, 1) if tg > 0 else 0
+            },
+            "lanes": data["lanes"]
         })
         
     return {"data": sorted(champions_stats, key=lambda x: x["games"], reverse=True)}

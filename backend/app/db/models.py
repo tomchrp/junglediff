@@ -92,7 +92,6 @@ class MatchParticipant(Base):
     team_id = Column(Integer, nullable=False)
     champion_id = Column(Integer, nullable=False)
     lane = Column(String, nullable=False)
-    position = Column(String, nullable=False)
     win = Column(Boolean, nullable=False)
     kills = Column(Integer, nullable=False)
     deaths = Column(Integer, nullable=False)
@@ -108,7 +107,7 @@ class MatchParticipant(Base):
 
     __table_args__ = (
         UniqueConstraint('match_id', 'puuid', name='uix_match_puuid'),
-        Index('ix_participant_filter', 'puuid', 'position', 'champion_id'),
+        Index('ix_participant_filter', 'puuid', 'champion_id'),
     )
 
 
@@ -170,23 +169,44 @@ class CrawlerState(Base):
     current_rate_limit_sleep = Column(Integer, nullable=False, default=0)
     started_at = Column(BigInteger, nullable=True)
 
-class GlobalChampionTimeStats(Base):
+class MVCommunityMatchups(Base):
     """
-    Table d'agrégation analytique (Data Mart).
-    Stocke les statistiques de victoire des champions par tranches de temps (buckets)
-    pour éviter les calculs lourds à la volée lors de la consultation des synergies.
+    Vue matérialisée d'agrégation analytique (Data Mart).
+    Calcule le taux de victoire croisé des affrontements (Joueur A VS Joueur B)
+    par tranches de 5 minutes.
     
-    La clé primaire composite (champion_id, lane, duration_bucket) garantit l'unicité
-    de chaque point de donnée sur le graphe temporel communautaire.
+    Bien qu'il s'agisse d'une vue, SQLAlchemy exige la déclaration de Primary Keys
+    pour reconstituer les objets uniques.
     """
-    __tablename__ = "global_champion_time_stats"
+    __tablename__ = "mv_community_matchups"
+    __table_args__ = {'info': dict(is_view=True)}
 
-    # Clé primaire composite
-    champion_id = Column(Integer, primary_key=True, index=True)
-    lane = Column(String, primary_key=True, index=True)
-    # Tranche de temps en minutes (ex: 15, 20, 25)
+    # Clé primaire composite virtuelle dictée par l'indexation de la vue
+    subject_champion_id = Column(Integer, primary_key=True)
+    subject_lane = Column(String, primary_key=True)
+    target_champion_id = Column(Integer, primary_key=True)
+    target_lane = Column(String, primary_key=True)
     duration_bucket = Column(Integer, primary_key=True) 
 
-    # Métriques précalculées
-    matches_count = Column(Integer, default=0, nullable=False)
-    wins_count = Column(Integer, default=0, nullable=False)
+    # Métriques précalculées par PostgreSQL
+    matches_count = Column(Integer, nullable=False)
+    wins_count = Column(Integer, nullable=False)
+
+
+class MVCommunitySynergies(Base):
+    """
+    Vue matérialisée d'agrégation analytique (Data Mart).
+    Calcule le taux de victoire croisé des coopérations (Joueur A AVEC Joueur B)
+    par tranches de 5 minutes.
+    """
+    __tablename__ = "mv_community_synergies"
+    __table_args__ = {'info': dict(is_view=True)}
+
+    subject_champion_id = Column(Integer, primary_key=True)
+    subject_lane = Column(String, primary_key=True)
+    target_champion_id = Column(Integer, primary_key=True)
+    target_lane = Column(String, primary_key=True)
+    duration_bucket = Column(Integer, primary_key=True) 
+
+    matches_count = Column(Integer, nullable=False)
+    wins_count = Column(Integer, nullable=False)

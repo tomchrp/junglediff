@@ -319,8 +319,8 @@ class CrawlerService:
                         puuid=p_puuid,
                         team_id=participant.get("teamId", 0),
                         champion_id=participant.get("championId", 0),
-                        lane=participant.get("lane", "NONE"),
-                        position=participant.get("teamPosition", "NONE"),
+                        # CIBLAGE API MATCH-V5 : On injecte la vraie position dans l'unique colonne 'lane'
+                        lane=participant.get("teamPosition", "NONE"),
                         win=participant.get("win", False),
                         kills=participant.get("kills", 0),
                         deaths=participant.get("deaths", 0),

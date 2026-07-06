@@ -380,9 +380,9 @@ Afin de supporter l'affichage lisible de données temporelles complexes (courbes
 
 ### 15.1. Contrat de Données et Orchestrateur (Backend)
 L'ancien format de données plat a été remplacé par une structure multi-dimensionnelle groupée par rôle.
-* **Extraction Sémantique :** L'orchestrateur SQL extrait désormais systématiquement la `lane` des participants analysés.
-* **Groupement Actif :** Le backend calcule et assemble les résultats dans un dictionnaire structuré par position (`{ TOP: [...], JUNGLE: [...], etc. }`), permettant au frontend d'ingérer la donnée brute sans aucun post-traitement JavaScript lourd.
-* **Référentiel Communautaire Isolé :** La donnée "Global Champion" affichée n'est pas croisée avec le matchup exact (pour éviter une explosion combinatoire des calculs en base), mais représente le référentiel d'efficacité temporel global du champion ciblé.
+* **Extraction Sémantique** : L'orchestrateur SQL extrait désormais systématiquement la lane des participants analysés.
+* **Groupement Actif** : Le backend calcule et assemble les résultats dans un dictionnaire structuré par position ({ TOP: [...], JUNGLE: [...], etc. }), permettant au frontend d'ingérer la donnée brute sans aucun post-traitement JavaScript lourd.
+* **Référentiel Communautaire Croisé (Vues Matérialisées)** : Contrairement à la version précédente, la donnée globale n'est plus une moyenne absolue du champion affronté. L'orchestrateur extrait le pool exact d'affrontements du joueur (ex: "Mes parties d'Orianna contre Zed") et interroge des Vues Matérialisées pour obtenir l'addition mathématique exacte de ces affrontements spécifiques au niveau communautaire.
 
 ### 15.2. Architecture UI "Bottom Console" (Split Horizontal)
 L'interface en accordéon (qui écrasait les graphiques) a été remplacée par un pattern "Master-Detail" horizontal, optimal pour la Data-Viz.
@@ -398,3 +398,22 @@ Le cycle de vie du composant a été sécurisé contre les requêtes superflues 
 Des mécanismes stricts ont été mis en place pour empêcher l'interface de "sauter" ou de déborder.
 * **Scroll Anchoring Actif :** Les mini-cartes utilisent `React.forwardRef`. Lors du clic, l'apparition de la Bottom Console redimensionne la grille. Un `useEffect` attend la fin de l'animation CSS (310ms) puis exécute un `scrollIntoView` pour forcer le navigateur à recentrer le scroll sur la carte cliquée.
 * **Contrôle Spatial et Design System :** Les cartes compactes imposent un `min-w-0` et un `truncate` stricts sur les libellés de volume (parties jouées) pour empêcher l'apparition d'une troisième ligne de texte ou d'une barre de défilement horizontale. Les couleurs sémantiques (`text-lol-win`, `text-lol-loss`) sont calculées dynamiquement pour le joueur et la communauté autour du pivot d'équilibre (50%).
+
+# 16. Moteur Big Data et Topographie Riot API (Août 2026)
+L'architecture analytique a franchi un cap pour supporter l'ingestion massive sans dégrader les temps de réponse de l'API.
+
+### 16.1. Vues Matérialisées (Materialized Views)
+Pour contrer l'explosion combinatoire des calculs de matchups (plus de 130 000 combinaisons par tranches de 5 minutes), le calcul à la volée a été abandonné au profit du moteur relationnel.
+
+* **Snapshot Analytique** : La base PostgreSQL génère des vues matérialisées pré-calculant les winrates croisés de la communauté (Matchups et Synergies).
+
+* **Rafraîchissement Non Bloquant** : Grâce à l'utilisation d'index uniques composites (sur les champions, les rôles et la tranche de temps), le rafraîchissement des vues s'effectue via l'instruction REFRESH MATERIALIZED VIEW CONCURRENTLY. Le processus d'agrégation tourne en arrière-plan (script ETL dédié) sans jamais verrouiller la table ni interrompre le service côté client.
+
+### 16.2. Topographie Match-V5 et Correction Géo-Spatiale
+Une anomalie majeure d'héritage de l'API Riot (champ lane de la V4 taggué en NONE dans la quasi-totalité des parties modernes) causait une fuite de données massive, rendant les champions invisibles dans les algorithmes.
+
+* **Abandon du Legacy** : Le Crawler ignore désormais le champ obsolète lane et exploite exclusivement le champ teamPosition (calculé algorithmiquement par Riot sur les 15 premières minutes de jeu).
+
+* **Déduplication Hot Storage** : L'architecture du modèle MatchParticipant a été nettoyée. Les données historiques exactes ont été transférées massivement via une commande SQL vers la colonne métier lane, et la colonne redondante position a été détruite pour garantir une source de vérité unique (SSOT).
+
+* **Diagnostic Frontend (Laboratoire Big Data)** : Ajout d'une colonne de répartition spatiale (Lanes) par champion dans la vue globale pour monitorer et auditer la viabilité des classifications Riot en temps réel (ex: Détection et compréhension des biais algorithmiques comme le cas du "Fasting Senna").

@@ -335,7 +335,10 @@ function App() {
               )}
 
               {currentMainView === 'ANALYSE_GLOBALE' && (
-                <GlobalChampionsView />
+                <GlobalChampionsView
+                  versionDDragon={versionDDragon}
+                  championMap={championMap}
+                />
               )}
             </div>
           </div>

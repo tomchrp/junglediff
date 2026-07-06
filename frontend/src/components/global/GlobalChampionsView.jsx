@@ -5,8 +5,13 @@
  *
  * DESCRIPTION :
  * Vue expérimentale de restitution Big Data communautaire.
- * Intègre la nouvelle télémétrie du Data Lake (Vérification de l'ingestion)
- * et les analyses avancées de Snowballing basées sur les timelines.
+ * Intègre la télémétrie du Data Lake, les métriques de Snowballing, 
+ * et la répartition par lane des champions pour auditer le volume des données.
+ *
+ * MODIFICATIONS :
+ * - Sécurisation du rendu avec un fallback (champ.lanes || {}) pour éviter
+ *   les crashs liés à la conservation du state par le HMR de Vite lors
+ *   d'une mise à jour de l'API.
  * ============================================================================
  */
 
@@ -15,16 +20,18 @@ import axios from 'axios';
 import { Database, Activity, TrendingUp, AlertTriangle } from 'lucide-react';
 import Avatar from '../ui/Avatar';
 
-const GlobalChampionsView = () => {
+export default function GlobalChampionsView({ versionDDragon, championMap }) {
     const [stats, setStats] = useState([]);
     const [telemetry, setTelemetry] = useState(null);
     const [snowball, setSnowball] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    /**
+     * Récupère simultanément toutes les données globales nécessaires à la vue.
+     */
     useEffect(() => {
         const fetchAllData = async () => {
             try {
-                // Exécution en parallèle pour réduire le temps de chargement global
                 const [champsRes, telemetryRes, snowballRes] = await Promise.all([
                     axios.get('http://localhost:8000/api/v1/global/champions'),
                     axios.get('http://localhost:8000/api/v1/global/telemetry'),
@@ -62,12 +69,11 @@ const GlobalChampionsView = () => {
                     Laboratoire Big Data
                 </h1>
                 <p className="text-sm text-lol-textMuted mt-1">
-                    Validation de l'ingestion asynchrone et des métriques temporelles à 15 minutes.
+                    Validation de l'ingestion asynchrone et de la répartition par lane des champions.
                 </p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-
                 {/* BLOC A : Télémétrie du Data Lake */}
                 {telemetry && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -103,16 +109,14 @@ const GlobalChampionsView = () => {
                     </div>
                 )}
 
-                {/* BLOC B : Analyse du Snowball (Validation 15 minutes) */}
+                {/* BLOC B : Analyse du Snowball */}
                 {snowball && snowball.winrate_analysis.snowballing && (
                     <div className="glass-panel p-6 border-l-4 border-l-lol-gold">
                         <h2 className="text-lg font-bold text-gray-100 flex items-center gap-2 mb-4">
                             <TrendingUp className="w-5 h-5 text-lol-gold" />
                             Impact du Snowball à 15 Minutes
                         </h2>
-
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Probabilité de Victoire */}
                             <div className="space-y-4">
                                 <div className="bg-surface-elevated p-4 rounded border border-border-strong flex justify-between items-center">
                                     <div>
@@ -133,8 +137,6 @@ const GlobalChampionsView = () => {
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Générateurs d'écart */}
                             <div>
                                 <h3 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wider">Top Générateurs d'Or</h3>
                                 <div className="space-y-2">
@@ -143,8 +145,8 @@ const GlobalChampionsView = () => {
                                             <div className="flex items-center gap-3">
                                                 <div className="text-gray-500 font-bold w-4">{index + 1}.</div>
                                                 <Avatar
+                                                    src={championMap && championMap[champ.champion_id] ? `https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${championMap[champ.champion_id].replace(/\s+/g, '')}.png` : undefined}
                                                     type="champion"
-                                                    id={champ.champion_id}
                                                     size="sm"
                                                 />
                                                 <div className="text-xs text-gray-400">({champ.games} games)</div>
@@ -160,24 +162,41 @@ const GlobalChampionsView = () => {
                     </div>
                 )}
 
-                {/* Tableau Classique (Limité aux 50 premiers pour la performance DOM) */}
+                {/* Tableau Classique : Augmenté avec la répartition par Lane */}
                 <div className="glass-panel overflow-hidden">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-surface-elevated text-xs uppercase text-lol-textMuted border-b border-border-strong">
                             <tr>
-                                <th className="px-6 py-4 font-bold">Champion</th>
-                                <th className="px-6 py-4 font-bold">Parties (Big Data)</th>
-                                <th className="px-6 py-4 font-bold">Winrate Moyen</th>
-                                <th className="px-6 py-4 font-bold">KDA Moyen</th>
+                                <th className="px-6 py-4 font-bold w-16">Champion</th>
+                                <th className="px-6 py-4 font-bold">Répartition par Lane</th>
+                                <th className="px-6 py-4 font-bold w-32">Total Parties</th>
+                                <th className="px-6 py-4 font-bold w-32">Winrate</th>
+                                <th className="px-6 py-4 font-bold w-32">KDA Moyen</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border-glass">
-                            {stats.slice(0, 50).map((champ) => (
+                            {stats.slice(0, 100).map((champ) => (
                                 <tr key={champ.champion_id} className="hover:bg-surface-elevated/30 transition-colors">
                                     <td className="px-6 py-3">
-                                        <Avatar type="champion" id={champ.champion_id} size="md" />
+                                        <Avatar
+                                            src={championMap && championMap[champ.champion_id] ? `https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${championMap[champ.champion_id].replace(/\s+/g, '')}.png` : undefined}
+                                            type="champion"
+                                            size="md"
+                                        />
                                     </td>
-                                    <td className="px-6 py-3 font-bold tabular-nums text-gray-300">
+                                    <td className="px-6 py-3">
+                                        <div className="flex flex-wrap gap-2">
+                                            {/* Sécurisation HMR avec fallback objet vide */}
+                                            {Object.entries(champ.lanes || {})
+                                                .sort((a, b) => b[1] - a[1])
+                                                .map(([lane, count]) => (
+                                                    <span key={lane} className="text-xs px-2 py-1 rounded bg-surface-solid border border-border-strong text-gray-300">
+                                                        {lane.substring(0, 3)}: <span className="text-lol-gold font-bold ml-1">{count}</span>
+                                                    </span>
+                                                ))}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-3 font-bold tabular-nums text-gray-100">
                                         {champ.games}
                                     </td>
                                     <td className={`px-6 py-3 font-bold tabular-nums ${champ.winrate >= 50 ? 'text-lol-win' : 'text-lol-loss'}`}>
@@ -194,6 +213,4 @@ const GlobalChampionsView = () => {
             </div>
         </div>
     );
-};
-
-export default GlobalChampionsView;
+}

@@ -1,33 +1,65 @@
 """
 ===============================================================================
 FICHIER : backend/app/services/analysis/synergy_orchestrator.py
+PROJET  : JungleDiff
+
+DESCRIPTION :
+Moteur d'analyse croisée calculant les métriques de synergies et de matchups.
+
+MODIFICATIONS :
+- Ajout de l'argument `player_champion_id` dans la méthode get_player_matchups.
+- Injection dynamique d'une clause conditionnelle WHERE dans la requête SQL
+  d'extraction des matchs initiaux du joueur pour filtrer sur son champion actif.
 ===============================================================================
 """
-from typing import Dict, Any
-from sqlalchemy import select, desc, func, cast, Integer
+from typing import Dict, Any, Optional
+from sqlalchemy import select, desc, func, cast, Integer, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models import MatchParticipant, Match, GlobalChampionTimeStats
+from app.db.models import MatchParticipant, Match, MVCommunityMatchups, MVCommunitySynergies
 
 class SynergyOrchestrator:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_player_matchups(self, puuid: str, role: str, analysis_type: str, limit: int = None) -> Dict[str, Any]:
+    async def get_player_matchups(
+        self, 
+        puuid: str, 
+        role: str, 
+        analysis_type: str, 
+        limit: Optional[int] = None,
+        player_champion_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Calcule les statistiques croisées d'un joueur contre ou avec le reste du pool de champions.
         
-        # 1. Parties du joueur : on récupère team_id et on calcule le bucket
+        Cette méthode complexe effectue une extraction par cercles concentriques :
+        1. Elle isole les identifiants de parties du joueur correspondant à sa lane et,
+           si spécifié, restreint l'analyse aux parties où il a joué un champion précis.
+        2. Elle cartographie les champions cohabitants (alliés ou ennemis) de ces matchs.
+        3. Elle interroge les Vues Matérialisées communautaires sur les couples exacts découverts.
+        4. Elle fusionne les chronologies temporelles pour renvoyer un état comparatif symétrique.
+        """
+        
+        # 1. Parties du joueur : on récupère team_id, champion_id et on calcule le bucket
         player_query = (
             select(
                 MatchParticipant.match_id, 
                 MatchParticipant.win,
                 MatchParticipant.team_id,
+                MatchParticipant.champion_id.label('player_champ'),
                 cast(func.floor(Match.game_duration / 300.0) * 5, Integer).label('duration_bucket')
             )
             .join(Match, MatchParticipant.match_id == Match.match_id)
             .where(MatchParticipant.puuid == puuid)
             .where(MatchParticipant.lane == role)
             .where(Match.game_duration > 0)
-            .order_by(desc(Match.creation_timestamp))
         )
+        
+        # APPLICATION DU FILTRE DE LA SIDEBAR (Résolution de la désynchronisation)
+        if player_champion_id:
+            player_query = player_query.where(MatchParticipant.champion_id == player_champion_id)
+            
+        player_query = player_query.order_by(desc(Match.creation_timestamp))
         
         if limit:
             player_query = player_query.limit(limit)
@@ -35,7 +67,6 @@ class SynergyOrchestrator:
         player_result = await self.db.execute(player_query)
         player_matches = player_result.fetchall()
 
-        # Structure canonique attendue par le Frontend (LaneGrid)
         empty_payload = { "TOP": [], "JUNGLE": [], "MIDDLE": [], "BOTTOM": [], "UTILITY": [] }
 
         if not player_matches:
@@ -43,7 +74,12 @@ class SynergyOrchestrator:
 
         match_ids = [row.match_id for row in player_matches]
         player_match_map = {
-            row.match_id: {"win": row.win, "team_id": row.team_id, "bucket": row.duration_bucket} 
+            row.match_id: {
+                "win": row.win, 
+                "team_id": row.team_id, 
+                "bucket": row.duration_bucket,
+                "player_champ": row.player_champ
+            } 
             for row in player_matches
         }
 
@@ -58,7 +94,7 @@ class SynergyOrchestrator:
 
         # 3. Filtrage et Groupement Multi-Dimensionnel (Par Lane -> Par Champion -> Par Bucket)
         local_stats = { "TOP": {}, "JUNGLE": {}, "MIDDLE": {}, "BOTTOM": {}, "UTILITY": {} }
-        target_champions = set()
+        experienced_pairs = set()
         
         for part in other_participants:
             m_data = player_match_map[part.match_id]
@@ -68,11 +104,12 @@ class SynergyOrchestrator:
             if analysis_type == "MATCHUPS" and is_ally: continue
             
             part_lane = part.lane
-            # Ignorer les modes de jeux sans lane définie (ARAM) ou les données corrompues
             if part_lane not in local_stats: continue
                 
             champ_id = part.champion_id
-            target_champions.add(champ_id)
+            player_champ_id = m_data["player_champ"]
+            
+            experienced_pairs.add((player_champ_id, champ_id, part_lane))
             
             if champ_id not in local_stats[part_lane]:
                 local_stats[part_lane][champ_id] = {"total_matches": 0, "total_wins": 0, "buckets": {}}
@@ -89,28 +126,46 @@ class SynergyOrchestrator:
             if m_data["win"]:
                 local_stats[part_lane][champ_id]["buckets"][b]["wins"] += 1
 
-        if not target_champions:
+        if not experienced_pairs:
             return empty_payload
 
-        # 4. Extraction du Référentiel Communautaire
+        # 4. Extraction du Référentiel Communautaire ciblé sur les couples découverts
+        Model = MVCommunitySynergies if analysis_type == "SYNERGIES" else MVCommunityMatchups
+        
+        pair_conditions = [
+            and_(
+                Model.subject_champion_id == p_champ,
+                Model.target_champion_id == t_champ,
+                Model.target_lane == t_lane
+            ) for p_champ, t_champ, t_lane in experienced_pairs
+        ]
+
         global_stats_query = (
-            select(GlobalChampionTimeStats)
-            .where(GlobalChampionTimeStats.champion_id.in_(list(target_champions)))
+            select(Model)
+            .where(Model.subject_lane == role)
+            .where(or_(*pair_conditions))
         )
+        
         global_result = await self.db.execute(global_stats_query)
         global_rows = global_result.scalars().all()
 
         global_stats_map = {}
         for row in global_rows:
-            c_id = row.champion_id
-            if c_id not in global_stats_map:
-                global_stats_map[c_id] = {}
+            t_lane = row.target_lane
+            t_champ = row.target_champion_id
+            b = row.duration_bucket
             
-            if row.duration_bucket not in global_stats_map[c_id]:
-                global_stats_map[c_id][row.duration_bucket] = {"matches": 0, "wins_count": 0}
+            if t_lane not in global_stats_map:
+                global_stats_map[t_lane] = {}
             
-            global_stats_map[c_id][row.duration_bucket]["matches"] += row.matches_count
-            global_stats_map[c_id][row.duration_bucket]["wins_count"] += row.wins_count
+            if t_champ not in global_stats_map[t_lane]:
+                global_stats_map[t_lane][t_champ] = {}
+                
+            if b not in global_stats_map[t_lane][t_champ]:
+                global_stats_map[t_lane][t_champ][b] = {"matches": 0, "wins": 0}
+            
+            global_stats_map[t_lane][t_champ][b]["matches"] += row.matches_count
+            global_stats_map[t_lane][t_champ][b]["wins"] += row.wins_count
 
         # 5. Assemblage du Payload Final structuré par Lane
         payload = { "TOP": [], "JUNGLE": [], "MIDDLE": [], "BOTTOM": [], "UTILITY": [] }
@@ -120,7 +175,7 @@ class SynergyOrchestrator:
                 player_global_wr = (p_stats["total_wins"] / p_stats["total_matches"]) * 100
                 
                 combined_timeline = []
-                g_stats = global_stats_map.get(champ_id, {})
+                g_stats = global_stats_map.get(lane_key, {}).get(champ_id, {})
                 all_buckets = sorted(set(p_stats["buckets"].keys()).union(g_stats.keys()))
                 
                 total_global_matches = 0
@@ -128,7 +183,7 @@ class SynergyOrchestrator:
                 
                 for b in all_buckets:
                     g_bucket_matches = g_stats.get(b, {}).get("matches", 0)
-                    g_bucket_wins = g_stats.get(b, {}).get("wins_count", 0)
+                    g_bucket_wins = g_stats.get(b, {}).get("wins", 0)
                     g_bucket_wr = (g_bucket_wins / g_bucket_matches * 100) if g_bucket_matches > 0 else 0
                     
                     total_global_matches += g_bucket_matches
@@ -164,7 +219,6 @@ class SynergyOrchestrator:
                     },
                     "timeline": combined_timeline
                 })
-            # Tri interne pour chaque lane
             payload[lane_key].sort(key=lambda x: x["player_stats"]["matches"], reverse=True)
 
         return payload
