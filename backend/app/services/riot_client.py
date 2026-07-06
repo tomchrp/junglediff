@@ -69,15 +69,15 @@ class RiotClient:
                     logger.warning(f"Rate limit Riot atteint sur {url}. Pose du verrou global pour {retry_after}s.")
                     await self.redis.set(lock_key, "locked", ex=retry_after)
                     
-                    # LE FAIL-FAST EN CAS DE CHOC DIRECT
                     if fail_fast:
                         raise RateLimitExceeded(retry_after)
                         
                     await asyncio.sleep(retry_after)
                     continue
-                elif response.status_code == 403:
-                    logger.error("Erreur 403: La clé API Riot est probablement expirée.")
-                    raise APIKeyExpired("Clé API Riot expirée ou invalide.")
+                # Ajout du code 401 dans la condition
+                elif response.status_code in (401, 403):
+                    logger.error(f"Erreur {response.status_code}: La clé API Riot est expirée ou invalide.")
+                    raise APIKeyExpired("Clé API Riot expirée ou invalide. Veuillez la renouveler.")
                 elif response.status_code == 404:
                     return None
                 else:

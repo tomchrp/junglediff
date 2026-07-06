@@ -10,7 +10,7 @@ matches, etc.) avant leur injection dans l'instance FastAPI.
 """
 
 from fastapi import APIRouter
-from app.api.endpoints import players, matches, chat, crawler, global_stats
+from app.api.endpoints import players, matches, chat, crawler, global_stats, synergies
 
 api_router = APIRouter()
 
@@ -19,3 +19,4 @@ api_router.include_router(matches.router, prefix="/matches", tags=["Matches"])
 api_router.include_router(chat.router, prefix="/chat", tags=["Chat"])
 api_router.include_router(crawler.router, prefix="/crawler", tags=["Crawler"])
 api_router.include_router(global_stats.router, prefix="/global", tags=["Global"])
+api_router.include_router(synergies.router, prefix="/synergies", tags=["Synergies & Matchups"])

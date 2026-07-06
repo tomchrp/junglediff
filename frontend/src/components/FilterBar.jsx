@@ -4,13 +4,12 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Barre transversale de filtrage permettant d'affiner l'historique des matchs.
- * Ce composant gère deux types de filtres :
- * 1. Le rôle (Lane) : Exécuté via une série de boutons utilisant la primitive 
- * <Avatar> pour un accès rapide et visuel en un clic, avec un comportement 
- * de bascule (toggle).
- * 2. Le patch : Conservé dans un menu déroulant <CustomSelect> car il s'agit 
- * d'une action secondaire moins fréquente.
+ * Barre transversale de filtrage permettant d'affiner le contexte analytique.
+ * * MODIFICATIONS (Phase 3) :
+ * - Intégration d'un rendu hybride (Pattern "Segmented Control").
+ * - Rétrocompatibilité : Si le composant reçoit `timeFilter`, il affiche la
+ * nouvelle logique Carrière/Récent (pour la vue Synergies). Sinon, il 
+ * conserve son comportement original avec le sélecteur de Patch (pour l'Historique).
  * ============================================================================
  */
 import React, { useState, useEffect } from 'react';
@@ -27,14 +26,24 @@ const LANES = [
     { id: 'UTILITY', icon: 'support', label: 'Support' }
 ];
 
-const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChange, refreshTrigger }) => {
+const FilterBar = ({
+    puuid,
+    currentLane,
+    currentPatch,
+    onLaneChange,
+    onPatchChange,
+    refreshTrigger,
+    // Nouvelles props optionnelles pour la vue Synergies
+    timeFilter,
+    onTimeFilterChange,
+    recentCount,
+    onRecentCountChange
+}) => {
     const [availablePatches, setAvailablePatches] = useState([]);
 
-    /**
-     * Effectue l'appel réseau pour récupérer la liste dynamique des patchs 
-     * joués par l'utilisateur. Se déclenche au chargement ou lors d'un forçage
-     * de rafraîchissement (refreshTrigger).
-     */
+    // Détection du mode : Sommes-nous dans la vue Synergies ou Historique ?
+    const isSynergiesMode = typeof onTimeFilterChange === 'function';
+
     useEffect(() => {
         if (!puuid) {
             setAvailablePatches([]);
@@ -53,13 +62,6 @@ const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChan
         fetchPatches();
     }, [puuid, refreshTrigger]);
 
-    /**
-     * Gère la sélection d'un rôle dans la barre de filtres.
-     * Implémente une logique de bascule (toggle) : si l'utilisateur clique 
-     * sur un rôle qui est déjà actif, le filtre est automatiquement réinitialisé 
-     * sur 'ALL' pour éviter des clics inutiles.
-     * * @param {string} laneId - L'identifiant de la lane sélectionnée (ex: 'TOP').
-     */
     const handleLaneToggle = (laneId) => {
         if (currentLane === laneId && laneId !== 'ALL') {
             onLaneChange('ALL');
@@ -73,13 +75,19 @@ const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChan
         ...availablePatches.map(patch => ({ value: patch, label: `Patch ${patch}` }))
     ];
 
+    const recentOptions = [
+        { value: 20, label: '20 dernières parties' },
+        { value: 40, label: '40 dernières parties' },
+        { value: 60, label: '60 dernières parties' }
+    ];
+
     return (
-        <div className="glass-panel p-3 flex gap-4 items-center z-40 relative">
+        <div className="glass-panel p-3 flex flex-wrap gap-4 items-center z-40 relative">
             <span className="text-lol-textMuted text-sm font-semibold uppercase tracking-wider ml-2 mr-2">
                 Filtres :
             </span>
 
-            {/* Section Rôles (Lanes) - Rendu sous forme de boutons Avatar */}
+            {/* Section Rôles (Lanes) - Commune à toutes les vues */}
             <div className="flex gap-2 items-center">
                 {LANES.map(lane => (
                     <button
@@ -99,13 +107,46 @@ const FilterBar = ({ puuid, currentLane, currentPatch, onLaneChange, onPatchChan
                 ))}
             </div>
 
-        
-            {/* Section Patch - Volet déroulant intact */}
-            <CustomSelect
-                value={currentPatch}
-                options={patchOptions}
-                onChange={onPatchChange}
-            />
+            {/* Séparateur visuel */}
+            <div className="h-8 w-px bg-border-glass mx-2"></div>
+
+            {/* Rendu Conditionnel du Contexte Temporel */}
+            {isSynergiesMode ? (
+                <div className="flex items-center gap-4">
+                    <div className="flex bg-surface-elevated rounded-md p-1 border border-border-glass shadow-inner">
+                        <button
+                            onClick={() => onTimeFilterChange('career')}
+                            className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${timeFilter === 'career' ? 'bg-lol-gold text-app-dark shadow-md' : 'text-gray-400 hover:text-gray-200'}`}
+                        >
+                            Carrière
+                        </button>
+                        <button
+                            onClick={() => onTimeFilterChange('recent')}
+                            className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${timeFilter === 'recent' ? 'bg-lol-gold text-app-dark shadow-md' : 'text-gray-400 hover:text-gray-200'}`}
+                        >
+                            Récent
+                        </button>
+                    </div>
+
+                    {timeFilter === 'recent' && (
+                        <div className="animate-fade-in">
+                            <CustomSelect
+                                value={recentCount}
+                                options={recentOptions}
+                                onChange={(val) => onRecentCountChange(Number(val))}
+                            />
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="animate-fade-in">
+                    <CustomSelect
+                        value={currentPatch}
+                        options={patchOptions}
+                        onChange={onPatchChange}
+                    />
+                </div>
+            )}
         </div>
     );
 };

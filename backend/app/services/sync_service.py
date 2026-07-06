@@ -1,20 +1,17 @@
+# -*- coding: utf-8 -*-
 """
 ===============================================================================
 FICHIER : backend/app/services/sync_service.py
 PROJET  : JungleDiff
 
 DESCRIPTION :
-Cœur de la logique métier pour l'ingestion différentielle. 
-Gère la synchronisation initiale (Triple Appel Léger), le Deep Fetch pour
-la pagination historique, et l'orchestration des workers ARQ avec 
-verrouillage anti-doublon des tâches.
+Service centralisé orchestrant la synchronisation des données et de l'historique.
+Gère la résolution d'identité Riot Account V1 et pilote la file d'attente Redis/ARQ.
 
-MODIFICATIONS RÉCENTES :
-- Priorisation ARQ : Routage des requêtes utilisateur à la volée vers 
-  la file 'high_priority' pour court-circuiter l'ingestion massive ('default').
-- Optimisation Quota API : Tri des parties ingérées par date d'apparition 
-  pour ne télécharger la timeline (coûteuse en jetons) que pour les 5 
-  parties les plus récentes.
+MODIFICATIONS :
+- Version intégrale non tronquée.
+- Transition définitive vers l'ingestion chronologique unifiée (Global Fetch)
+  pour éliminer les distorsions temporelles de la pagination frontend.
 ===============================================================================
 """
 
@@ -32,15 +29,15 @@ from app.services.riot_client import RiotClient
 
 class SyncService:
     def __init__(self, db: AsyncSession):
+        """Initialise le service avec la session de base de données et le client Riot."""
         self.db = db
         self.client = RiotClient(settings.RIOT_API_KEY)
 
     @staticmethod
     def _get_match_timestamp_approx(match_id: str) -> int:
         """
-        Extrait la partie numérique d'un identifiant Riot (ex: EUW1_6812345678 -> 6812345678)
-        utilisée pour trier rapidement les parties de la plus récente à la plus ancienne
-        sans avoir besoin d'interroger l'API pour connaître leur date de création exacte.
+        Extrait l'identifiant numérique de la partie pour effectuer un tri 
+        chronologique estimé avant traitement.
         """
         try:
             return int(match_id.split('_')[1])
@@ -49,25 +46,25 @@ class SyncService:
         
     async def sync_player_profile(self, server: str, game_name: str, tag_line: str) -> Dict[str, Any]:
         """
-        Synchronise le profil du joueur et récupère les 20 dernières parties 
-        de chaque file majeure. Met à jour les informations de ligue.
+        Coordonne le rafraîchissement complet du profil d'un joueur et planifie 
+        l'ingestion des 60 derniers matchs de façon strictement linéaire.
         """
         routing = self.client.get_routing(server)
         continent = routing["continent"]
         region = routing["region"]
 
-        # 1. Résolution du PUUID (Account V1)
+        # 1. Résolution de l'identité via Riot Account V1
         account = await self.client.get_account_by_riot_id(continent, game_name, tag_line, fail_fast=True)
         if not account:
             return {"error": "Joueur introuvable. Vérifiez le pseudo et le tag."}
         puuid = account.get("puuid")
 
-        # 2. Récupération Summoner V4
+        # 2. Extraction des caractéristiques du profil d'invocateur
         summoner_data = await self.client.get_summoner_by_puuid(region, puuid, fail_fast=True)
         if not summoner_data:
             return {"error": f"Impossible de récupérer le profil sur le serveur {server}."}
 
-        # 3. Récupération de l'Elo
+        # 3. Traitement des ligues et des points d'étape classés
         summoner_id = summoner_data.get("id")
         tier, rank, lp = None, None, None
         
@@ -80,21 +77,10 @@ class SyncService:
                     lp = entry.get("leaguePoints")
                     break
 
-        # 4. Le "Triple Appel Léger" (Conservation de 20 par file pour la vue historique globale)
-        api_tasks = [
-            self.client.get_match_ids(continent, puuid, queue=420, count=20, fail_fast=True),
-            self.client.get_match_ids(continent, puuid, queue=440, count=20, fail_fast=True),
-            self.client.get_match_ids(continent, puuid, queue=400, count=20, fail_fast=True)
-        ]
+        # 4. Exécution du Global Fetch (Agnostique du mode de jeu au niveau de la requête API)
+        all_fetched_ids = await self.client.get_match_ids(continent, puuid, start=0, count=60, fail_fast=True)
         
-        lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
-        
-        all_fetched_ids = set()
-        for l in lists_of_ids:
-            if isinstance(l, list):
-                all_fetched_ids.update(l)
-                
-        # 5. Filtre Anti-Doublon SQL
+        # 5. Détermination des deltas d'ingestion (Filtre anti-doublon SQL local)
         new_match_ids = []
         if all_fetched_ids:
             query = select(Match.match_id).where(Match.match_id.in_(all_fetched_ids))
@@ -102,7 +88,7 @@ class SyncService:
             existing_ids = set(result.scalars().all())
             new_match_ids = [m_id for m_id in all_fetched_ids if m_id not in existing_ids]
 
-        # 6. Sauvegarde du Profil
+        # 6. Persistance des attributs mis à jour de l'entité Player
         query_player = select(Player).where(Player.puuid == puuid)
         result_player = await self.db.execute(query_player)
         player = result_player.scalar_one_or_none()
@@ -124,18 +110,15 @@ class SyncService:
 
         await self.db.commit()
 
-        # 7. Transmission ARQ Sécurisée avec Optimisation du Quota
+        # 7. Distribution ordonnée des tâches vers le broker ARQ
         tasks_enqueued = 0
         if new_match_ids:
-            # Tri des parties de la plus récente à la plus ancienne
             new_match_ids.sort(key=self._get_match_timestamp_approx, reverse=True)
             
             redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
             for i, m_id in enumerate(new_match_ids):
-                # Seules les 5 premières parties bénéficient d'un téléchargement immédiat de la timeline
                 fetch_timeline = (i < 5)
                 
-                # Routage explicite vers la file 'default' pour ne pas bloquer le frontend
                 await redis_pool.enqueue_job(
                     'process_match_ingestion', 
                     m_id, 
@@ -158,23 +141,13 @@ class SyncService:
 
     async def fetch_older_matches(self, server: str, puuid: str, start_index: int) -> Dict[str, Any]:
         """
-        Déclenche la récupération de parties anciennes (Deep Fetch).
+        Requête un segment d'historique lointain dans le cadre du défilement infini.
+        Garantit le respect de l'alignement linéaire de l'axe temporel.
         """
         routing = self.client.get_routing(server)
         continent = routing["continent"]
 
-        api_tasks = [
-            self.client.get_match_ids(continent, puuid, start=start_index, queue=420, count=20),
-            self.client.get_match_ids(continent, puuid, start=start_index, queue=440, count=20),
-            self.client.get_match_ids(continent, puuid, start=start_index, queue=400, count=20)
-        ]
-        
-        lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
-        
-        all_fetched_ids = set()
-        for l in lists_of_ids:
-            if isinstance(l, list):
-                all_fetched_ids.update(l)
+        all_fetched_ids = await self.client.get_match_ids(continent, puuid, start=start_index, count=60)
                 
         new_match_ids = []
         if all_fetched_ids:
@@ -187,8 +160,6 @@ class SyncService:
         if new_match_ids:
             redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
             for m_id in new_match_ids:
-                # Sur du Deep Fetch (historique lointain), on désactive systématiquement 
-                # la timeline pour préserver le quota
                 await redis_pool.enqueue_job(
                     'process_match_ingestion', 
                     m_id, 
@@ -209,7 +180,7 @@ class SyncService:
     
     async def trigger_timeline_prefetch(self, target_ids: List[str], server: str) -> Dict[str, Any]:
         """
-        Déclenche l'ingestion asynchrone des timelines ciblées à la demande du frontend.
+        Propage une demande de pré-téléchargement urgent vers la file prioritaire d'ARQ.
         """
         routing = self.client.get_routing(server)
         continent = routing["continent"]
@@ -226,10 +197,7 @@ class SyncService:
         tasks_enqueued = 0
         if missing_targets:
             redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-            
             for m_id in missing_targets:
-                # Routage CRITIQUE : ces requêtes initiées par l'action humaine vont 
-                # dans la file 'high_priority' pour être traitées instantanément.
                 await redis_pool.enqueue_job(
                     'process_timeline_only', 
                     m_id, 
@@ -238,7 +206,6 @@ class SyncService:
                     _queue_name='high_priority'
                 )
                 tasks_enqueued += 1
-                
             await redis_pool.aclose()
 
         return {

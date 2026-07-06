@@ -32,7 +32,7 @@ const MatchList = ({
     const [hasMoreLocal, setHasMoreLocal] = useState(true);
     const [hasMoreRiot, setHasMoreRiot] = useState(true);
 
-    const [riotOffset, setRiotOffset] = useState(20);
+    const [riotOffset, setRiotOffset] = useState(60);
 
     const limit = 10;
     const scrollRef = useRef(null);
@@ -115,7 +115,7 @@ const MatchList = ({
             setIsLoading(true);
             try {
                 const res = await axios.post(`http://localhost:8000/api/v1/matches/${playerPuuid}/fetch-older?server=${currentServer}&current_total=${riotOffset}`);
-                setRiotOffset(prev => prev + 20);
+                setRiotOffset(prev => prev + 60);
 
                 if (res.data.new_matches_found === 0) {
                     setHasMoreRiot(false);

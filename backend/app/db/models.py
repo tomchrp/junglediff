@@ -169,3 +169,24 @@ class CrawlerState(Base):
     total_requests_made = Column(Integer, nullable=False, default=0)
     current_rate_limit_sleep = Column(Integer, nullable=False, default=0)
     started_at = Column(BigInteger, nullable=True)
+
+class GlobalChampionTimeStats(Base):
+    """
+    Table d'agrégation analytique (Data Mart).
+    Stocke les statistiques de victoire des champions par tranches de temps (buckets)
+    pour éviter les calculs lourds à la volée lors de la consultation des synergies.
+    
+    La clé primaire composite (champion_id, lane, duration_bucket) garantit l'unicité
+    de chaque point de donnée sur le graphe temporel communautaire.
+    """
+    __tablename__ = "global_champion_time_stats"
+
+    # Clé primaire composite
+    champion_id = Column(Integer, primary_key=True, index=True)
+    lane = Column(String, primary_key=True, index=True)
+    # Tranche de temps en minutes (ex: 15, 20, 25)
+    duration_bucket = Column(Integer, primary_key=True) 
+
+    # Métriques précalculées
+    matches_count = Column(Integer, default=0, nullable=False)
+    wins_count = Column(Integer, default=0, nullable=False)
