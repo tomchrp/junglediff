@@ -1,17 +1,6 @@
 /**
  * ============================================================================
  * FICHIER : frontend/src/components/synergies/MatchupTimeChart.jsx
- * PROJET  : JungleDiff
- *
- * DESCRIPTION :
- * Composant de Data-Visualization expert exploitant Recharts. 
- * Affiche la superposition de deux dimensions temporelles :
- * 1. Une aire continue (Area) représentant la "Montagne" communautaire globale.
- * 2. Un diagramme en barres discrètes (Bar) représentant les performances 
- *    spécifiques du joueur par tranches de 5 minutes.
- * 
- * Ce composant est purement "dumb" (Configuration-Driven). Il attend un 
- * payload pré-formaté par le SynergyOrchestrator du backend.
  * ============================================================================
  */
 import React from 'react';
@@ -19,46 +8,45 @@ import {
     ResponsiveContainer,
     ComposedChart,
     Area,
-    Bar,
+    Line,
     XAxis,
     YAxis,
-    Tooltip
+    Tooltip,
+    CartesianGrid,
+    Legend
 } from 'recharts';
 
-/**
- * CustomTooltip
- * 
- * Fonction complexe : Surcharge le comportement par défaut de l'infobulle Recharts.
- * Elle intercepte le payload actif lors du survol d'une tranche temporelle
- * et reformate les données pour afficher un comparatif clair (Joueur vs Communauté)
- * avec les volumes exacts de parties jouées pour justifier les pourcentages.
- */
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-        // payload[0] correspond généralement à la Montagne (Area)
-        // payload[1] correspond aux Barres (Joueur), s'il y a des données pour cette tranche
         const data = payload[0].payload;
+        const hasPlayerData = data.player_matches > 0;
 
         return (
-            <div className="bg-surface-solid border border-border-strong rounded shadow-lg p-2 text-xs">
-                <p className="font-bold text-gray-200 mb-1 pb-1 border-b border-border-glass">
-                    Tranche : {label} - {Number(label) + 5} min
+            <div className="bg-surface-solid border border-border-strong rounded shadow-lg p-3 text-xs min-w-[200px]">
+                <p className="font-bold text-gray-200 mb-2 pb-1 border-b border-border-glass">
+                    Autour de {label} minutes
                 </p>
-                <div className="flex flex-col gap-1 mt-2">
-                    <p className="text-lol-info font-semibold">
-                        Joueur : {data.player_winrate !== null ? `${data.player_winrate}%` : 'N/A'}
-                    </p>
-                    {data.player_matches > 0 && (
-                        <p className="text-gray-400 pl-2">
-                            ({data.player_wins} / {data.player_matches} victoires)
+                <div className="flex flex-col gap-2">
+                    <div>
+                        <p className="text-lol-gold font-bold flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-lol-gold inline-block"></span>
+                            Joueur : {hasPlayerData ? `${data.player_winrate}%` : 'Aucune partie'}
                         </p>
-                    )}
-                    <p className="text-gray-300 font-semibold mt-1">
-                        Communauté : {data.global_winrate}%
-                    </p>
-                    <p className="text-gray-500 pl-2">
-                        ({data.global_matches} parties)
-                    </p>
+                        {hasPlayerData && (
+                            <p className="text-gray-400 pl-4 mt-0.5">
+                                ({data.player_wins}V / {data.player_matches} parties)
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <p className="text-gray-300 font-bold flex items-center gap-1.5 mt-1">
+                            <span className="w-2 h-2 rounded-full bg-white/30 inline-block"></span>
+                            Communauté : {data.global_winrate}%
+                        </p>
+                        <p className="text-gray-500 pl-4 mt-0.5">
+                            ({data.global_matches} parties)
+                        </p>
+                    </div>
                 </div>
             </div>
         );
@@ -76,29 +64,44 @@ export default function MatchupTimeChart({ timeline }) {
     }
 
     return (
-        <div className="h-32 w-full mt-2">
+        <div className="h-40 w-full mt-2">
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                     data={timeline}
-                    margin={{ top: 5, right: 0, left: 0, bottom: 0 }}
+                    margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
                 >
+                    <CartesianGrid stroke="#ffffff" strokeOpacity={0.05} vertical={false} />
+
                     <XAxis
                         dataKey="bucket"
                         tickFormatter={(value) => `${value}m`}
                         tick={{ fill: '#888888', fontSize: 10 }}
                         axisLine={false}
                         tickLine={false}
-                        dy={5}
+                        dy={8}
                     />
-                    {/* YAxis masqué pour épurer l'interface, mais domaine forcé de 0 à 100 */}
+
                     <YAxis
                         domain={[0, 100]}
-                        hide={true}
+                        ticks={[0, 25, 50, 75, 100]}
+                        tickFormatter={(value) => `${value}%`}
+                        tick={{ fill: '#888888', fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
                     />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#ffffff', opacity: 0.05 }} />
 
-                    {/* Série 1 : La Montagne Communautaire */}
+                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff', strokeOpacity: 0.1, strokeWidth: 2 }} />
+
+                    <Legend
+                        verticalAlign="top"
+                        height={24}
+                        wrapperStyle={{ fontSize: '11px', color: '#888' }}
+                        iconType="circle"
+                    />
+
+                    {/* Montagne Communautaire */}
                     <Area
+                        name="Référentiel Communauté"
                         type="monotone"
                         dataKey="global_winrate"
                         fill="#ffffff"
@@ -108,12 +111,16 @@ export default function MatchupTimeChart({ timeline }) {
                         isAnimationActive={false}
                     />
 
-                    {/* Série 2 : Les Barres du Joueur */}
-                    <Bar
+                    {/* Ligne Joueur lissée */}
+                    <Line
+                        name="Performances Joueur"
+                        type="monotone"
                         dataKey="player_winrate"
-                        barSize={12}
-                        fill="#00a0db"
-                        radius={[2, 2, 0, 0]}
+                        stroke="#C89B3C"
+                        strokeWidth={3}
+                        dot={{ r: 4, fill: '#C89B3C', stroke: '#111', strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: '#fff' }}
+                        connectNulls={true}
                         isAnimationActive={false}
                     />
                 </ComposedChart>

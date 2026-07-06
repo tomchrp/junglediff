@@ -23,12 +23,13 @@ async def get_matchups_analysis(
     limit = None if time_filter == "career" else recent_count
     
     try:
+        # L'orchestrateur renvoie maintenant le dictionnaire par lane {TOP: [], ...}
         data = await orchestrator.get_player_matchups(puuid=puuid, role=lane.upper(), analysis_type=type.upper(), limit=limit)
         return {
             "status": "success",
             "lane": lane.upper(),
             "type": type.upper(),
-            "data": data
+            "data": data 
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

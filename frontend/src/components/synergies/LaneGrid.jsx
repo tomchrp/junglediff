@@ -5,14 +5,13 @@
  *
  * DESCRIPTION :
  * Grille structurelle affichant les cartes de synergies/matchups par rôle.
- * * CORRECTIONS :
- * - Alignement avec le nouveau contrat de données du backend (champion_id, 
- * player_stats, timeline).
- * - Restructuration en 5 colonnes flex-col indépendantes, dotées de leur 
- * propre overflow-y-auto pour isoler le scroll.
+ * 
+ * MODIFICATIONS :
+ * - Ajout de la prop `selectedTargetLane` pour vérifier la condition d'unicité.
+ * - Le booléen `isSelected` valide désormais l'ID du champion ET le rôle.
  * ============================================================================
  */
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import ChampionMiniCard from './ChampionMiniCard.jsx';
 
 const LANES = [
@@ -23,20 +22,33 @@ const LANES = [
     { id: 'UTILITY', label: 'Support' }
 ];
 
-export default function LaneGrid({ mode, currentLane, data, versionDDragon, championMap }) {
+export default function LaneGrid({ mode, currentLane, data, versionDDragon, championMap, selectedChampionId, selectedTargetLane, onSelectMatchup }) {
+    const selectedCardRef = useRef(null);
 
     /**
-     * renderColumnContent
-     * * Itère sur les statistiques de la lane et mappe les nouvelles données 
-     * (player_stats, timeline) vers la carte enfant.
+     * Effet de recentrage de la vue.
+     * Scroll automatiquement vers la carte active après la résolution 
+     * de l'animation CSS de la console (310ms).
      */
-    const renderColumnContent = (laneId) => {
-        const isPlayerLane = laneId === currentLane;
-        const laneData = data[laneId] || [];
+    useEffect(() => {
+        if (selectedCardRef.current) {
+            const timer = setTimeout(() => {
+                selectedCardRef.current?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }, 310);
+            return () => clearTimeout(timer);
+        }
+    }, [selectedChampionId, selectedTargetLane, data]);
+
+    const renderColumnContent = (lane) => {
+        const isPlayerLane = lane.id === currentLane;
+        const laneData = data[lane.id] || [];
 
         if (mode === 'SYNERGIES' && isPlayerLane) {
             return (
-                <div className="flex items-center justify-center border-2 border-dashed border-border-strong rounded-md p-4 h-32 mt-2">
+                <div className="flex items-center justify-center border-2 border-dashed border-border-strong rounded-md p-4 h-16 mt-2 shrink-0">
                     <span className="text-lol-textMuted font-bold text-xs text-center uppercase tracking-wider">Votre Position</span>
                 </div>
             );
@@ -46,20 +58,28 @@ export default function LaneGrid({ mode, currentLane, data, versionDDragon, cham
             return <div className="text-lol-textMuted text-xs text-center mt-4 italic">Aucune donnée</div>;
         }
 
-        return laneData.map((stat, index) => (
-            <ChampionMiniCard
-                key={`${laneId}-${stat.champion_id}-${index}`}
-                championId={stat.champion_id}
-                championName={championMap[stat.champion_id] || 'Inconnu'}
-                playerStats={stat.player_stats}
-                timeline={stat.timeline}
-                versionDDragon={versionDDragon}
-            />
-        ));
+        return laneData.map((stat, index) => {
+            // Unicité absolue : Il faut que l'ID corresponde ET que la colonne corresponde
+            const isSelected = selectedChampionId === stat.champion_id && selectedTargetLane === lane.id;
+
+            return (
+                <ChampionMiniCard
+                    key={`${lane.id}-${stat.champion_id}-${index}`}
+                    ref={isSelected ? selectedCardRef : null}
+                    championId={stat.champion_id}
+                    championName={championMap[stat.champion_id] || 'Inconnu'}
+                    playerStats={stat.player_stats}
+                    timeline={stat.timeline}
+                    versionDDragon={versionDDragon}
+                    isSelected={isSelected}
+                    onClick={() => onSelectMatchup(isSelected ? null : { ...stat, targetLane: lane.id })}
+                />
+            );
+        });
     };
 
     return (
-        <div className="flex flex-row gap-4 h-full min-h-0 w-full">
+        <div className="flex flex-row gap-3 h-full min-h-0 w-full">
             {LANES.map((lane) => {
                 const isPlayerLane = lane.id === currentLane;
                 const highlightOpponent = mode === 'MATCHUPS' && isPlayerLane;
@@ -71,13 +91,11 @@ export default function LaneGrid({ mode, currentLane, data, versionDDragon, cham
                     >
                         <div className={`text-center pb-2 mb-2 border-b shrink-0 ${highlightOpponent ? 'border-lol-loss/30' : 'border-border-glass'}`}>
                             <h4 className={`text-xs font-bold uppercase tracking-wider ${highlightOpponent ? 'text-lol-loss' : 'text-gray-200'}`}>
-                                {lane.label} {highlightOpponent && "(Adversaire)"}
+                                {lane.label}
                             </h4>
                         </div>
-
-                        {/* CORRECTION : L'intérieur de la colonne a un scroll autonome */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 flex flex-col gap-2">
-                            {renderColumnContent(lane.id)}
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pr-1 flex flex-col gap-1.5">
+                            {renderColumnContent(lane)}
                         </div>
                     </div>
                 );

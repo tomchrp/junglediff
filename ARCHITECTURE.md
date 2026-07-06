@@ -373,3 +373,28 @@ Ces données scalaires sont insérées dans `MatchParticipant` par des requêtes
 
 ### 14.2. Backfill Piloté par Base de Données
 Pour réhydrater un historique existant sans consommer l'API Riot, le script `backfill_from_cold.py` obéit au SGBD. Il liste les IDs présents dans PostgreSQL, se connecte au Data Lake MinIO, télécharge les JSON bruts correspondants, et exécute le Trimmer pour propager rétroactivement les nouvelles métriques d'analyse de phase de lane vers le Hot Storage.
+
+## 15. Refonte de l'Analyse Transverse (Synergies & Matchups)
+
+Afin de supporter l'affichage lisible de données temporelles complexes (courbes de winrate sur la durée) et d'assurer une navigation fluide entre des dizaines de champions, la vue "Synergies et Matchups" a été totalement restructurée.
+
+### 15.1. Contrat de Données et Orchestrateur (Backend)
+L'ancien format de données plat a été remplacé par une structure multi-dimensionnelle groupée par rôle.
+* **Extraction Sémantique :** L'orchestrateur SQL extrait désormais systématiquement la `lane` des participants analysés.
+* **Groupement Actif :** Le backend calcule et assemble les résultats dans un dictionnaire structuré par position (`{ TOP: [...], JUNGLE: [...], etc. }`), permettant au frontend d'ingérer la donnée brute sans aucun post-traitement JavaScript lourd.
+* **Référentiel Communautaire Isolé :** La donnée "Global Champion" affichée n'est pas croisée avec le matchup exact (pour éviter une explosion combinatoire des calculs en base), mais représente le référentiel d'efficacité temporel global du champion ciblé.
+
+### 15.2. Architecture UI "Bottom Console" (Split Horizontal)
+L'interface en accordéon (qui écrasait les graphiques) a été remplacée par un pattern "Master-Detail" horizontal, optimal pour la Data-Viz.
+* **Master (Top) :** Une grille (`LaneGrid`) occupant 100% de la largeur contenant des "Chips" (Mini-cartes) ultra-compactes, permettant de scanner rapidement les winrates et les volumes de jeu.
+* **Detail (Bottom) :** Lors du clic sur un champion, la vue se scinde. Une console fixe glisse depuis le bas de l'écran, offrant au graphique temporel (Recharts) toute la largeur nécessaire pour afficher une courbe lisse et lisible sans décaler la liste supérieure.
+
+### 15.3. Persistance d'État et Unicité (Frontend)
+Le cycle de vie du composant a été sécurisé contre les requêtes superflues et les conflits de sélection.
+* **Clé Composite :** L'état de sélection croise désormais l'identifiant du champion (`champion_id`) avec son rôle d'apparition (`targetLane`) pour empêcher les activations multiples si un même champion est joué sur plusieurs positions (ex: Yasuo Mid et Top).
+* **Persistance via `useRef` :** Lors d'un changement de filtre (ex: passage de "Carrière" à "Récent"), la sélection active est mémorisée silencieusement. Au retour de l'appel API, le composant cherche si la clé composite existe toujours dans le nouveau set de données et réhydrate la console automatiquement, évitant la frustration d'une fermeture intempestive.
+
+### 15.4. Stabilisation du DOM et Accessibilité
+Des mécanismes stricts ont été mis en place pour empêcher l'interface de "sauter" ou de déborder.
+* **Scroll Anchoring Actif :** Les mini-cartes utilisent `React.forwardRef`. Lors du clic, l'apparition de la Bottom Console redimensionne la grille. Un `useEffect` attend la fin de l'animation CSS (310ms) puis exécute un `scrollIntoView` pour forcer le navigateur à recentrer le scroll sur la carte cliquée.
+* **Contrôle Spatial et Design System :** Les cartes compactes imposent un `min-w-0` et un `truncate` stricts sur les libellés de volume (parties jouées) pour empêcher l'apparition d'une troisième ligne de texte ou d'une barre de défilement horizontale. Les couleurs sémantiques (`text-lol-win`, `text-lol-loss`) sont calculées dynamiquement pour le joueur et la communauté autour du pivot d'équilibre (50%).
