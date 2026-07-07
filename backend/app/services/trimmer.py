@@ -1,5 +1,3 @@
-# backend/app/services/trimmer.py
-
 """
 ===============================================================================
 FICHIER : backend/app/services/trimmer.py
@@ -10,12 +8,13 @@ Service de traitement de données (Data Engineering).
 Ce composant agit comme un filtre pour réduire drastiquement la taille des 
 JSON bruts de l'API Riot avant leur insertion en base de données (Warm Storage).
 
-MODIFICATIONS (PHASE 3 BIG DATA) :
+MODIFICATIONS (PHASE 3 BIG DATA & JUNGLE PATHING) :
 - trim_match_timeline : Récupération de `totalGold` et `xp` pour l'analyse
   de phase de lane (négligés dans la version précédente).
-- extract_timeline_metrics : Nouvelle fonction d'ingénierie analytique chargée 
-  de calculer les deltas de ressources croisés (vis-à-vis) à la 15ème minute 
-  afin d'alimenter les colonnes Hot Storage de PostgreSQL.
+- _extract_early_pathing : Nouvelle méthode utilitaire chargée de récupérer 
+  les coordonnées (x,y) d'un joueur aux minutes 1, 2 et 3.
+- extract_timeline_metrics : Mise à jour pour inclure les coordonnées spatiales 
+  dans le dictionnaire retourné, centralisant ainsi l'extraction Hot Storage.
 ===============================================================================
 """
 
@@ -228,15 +227,42 @@ class DataTrimmer:
         return trimmed_timeline
 
     @staticmethod
+    def _extract_early_pathing(frames: list, participant_id_str: str) -> dict:
+        """
+        Extrait les coordonnées spatiales X et Y d'un joueur aux minutes 1, 2 et 3.
+        
+        Cette fonction est conçue pour être tolérante aux pannes : si la partie 
+        est un Remake (moins de 3 frames) ou si le joueur est AFK (pas de position), 
+        la valeur None est renvoyée pour empêcher l'écrasement ou le crash.
+        """
+        positions = {
+            "pos_f1_x": None, "pos_f1_y": None,
+            "pos_f2_x": None, "pos_f2_y": None,
+            "pos_f3_x": None, "pos_f3_y": None,
+        }
+        
+        for minute in [1, 2, 3]:
+            if minute < len(frames):
+                participant_frame = frames[minute].get("participantFrames", {}).get(participant_id_str, {})
+                pos = participant_frame.get("position")
+                
+                if pos:
+                    positions[f"pos_f{minute}_x"] = pos.get("x")
+                    positions[f"pos_f{minute}_y"] = pos.get("y")
+                    
+        return positions
+
+    @staticmethod
     def extract_timeline_metrics(trimmed_match: Dict[str, Any], trimmed_timeline: Dict[str, Any], target_minute: int = 15) -> Dict[str, Any]:
         """
-        Extrait les métriques croisées à un instant T (15 minutes).
-        Parcourt les frames pour trouver la 15ème minute, map les rôles, 
-        calcule le delta de statistiques entre un joueur et son vis-à-vis,
-        et détermine si le joueur est en état de Snowball.
+        Extrait les métriques croisées et spatiales afin d'hydrater la table MatchParticipant.
+        
+        Opérations :
+        - Parcourt les frames pour extraire les deltas économiques à la 15ème minute (vis-à-vis).
+        - Appelle la méthode `_extract_early_pathing` pour récupérer le parcours initial.
         
         Retourne : 
-        { "puuid_du_joueur": {"gold_diff_15m": X, "xp_diff_15m": Y, "is_snowballing": Bool} }
+        { "puuid_du_joueur": {"gold_diff_15m": X, "pos_f1_x": Y, ...} }
         """
         metrics = {}
         if not trimmed_match or not trimmed_timeline:
@@ -248,13 +274,13 @@ class DataTrimmer:
         target_timestamp_ms = target_minute * 60 * 1000
         target_frame = None
         
-        # Identification de la frame temporelle ciblée
+        # Identification de la frame temporelle ciblée pour l'économie
         for frame in frames:
             if frame.get("timestamp", 0) >= target_timestamp_ms:
                 target_frame = frame
                 break
                 
-        # Si la partie s'est terminée par un surrender avant 15 minutes, on prend la dernière frame disponible
+        # Si la partie s'est terminée par un surrender avant 15 minutes
         if not target_frame and frames:
             target_frame = frames[-1]
             
@@ -307,10 +333,14 @@ class DataTrimmer:
             if gold_diff is not None:
                 is_snowballing = gold_diff >= 1000
                 
+            # Extraction des données spatiales du early game
+            pathing_data = DataTrimmer._extract_early_pathing(frames, p_id_str)
+                
             metrics[puuid] = {
                 "gold_diff_15m": gold_diff,
                 "xp_diff_15m": xp_diff,
-                "is_snowballing": is_snowballing
+                "is_snowballing": is_snowballing,
+                **pathing_data  # Injection des coordonnées dans le dictionnaire
             }
             
         return metrics

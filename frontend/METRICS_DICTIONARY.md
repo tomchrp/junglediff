@@ -31,6 +31,8 @@
 | `METRICS.SKILLSHOTS_EARLY` | `landSkillShotsEarlyGame` | Harcèlement (Avant 14m) | StatCardSimple |
 | `METRICS.SKILLSHOTS_HIT` | `skillshotsHit` | Sorts touchés | N/A |
 | `METRICS.SKILLSHOTS_DODGED` | `skillshotsDodged` | Sorts esquivés | N/A |
+| `METRICS.TOTAL_SPELLS_CAST` | `totalSpellsCast` | Sorts lancés (Total) | N/A |
+| `METRICS.SPELL_HIT_RATIO` | `spellHitRatio` | Précision globale | N/A |
 | `METRICS.SURVIVABILITY_TIME` | `longestTimeSpentLiving` | Positionnement & Sécurité | StatCardSimple |
 | `METRICS.ENEMY_IMMOBILIZATIONS` | `enemyChampionImmobilizations` | Immobilisations | N/A |
 | `METRICS.IMMOBILIZE_AND_KILL` | `immobilizeAndKillWithAlly` | Aides létales sous contrôle | N/A |
@@ -41,12 +43,31 @@
 | `METRICS.DAMAGE_TO_EPIC` | `damageToEpic` | Dégâts aux Épiques | StatCardSimple |
 | `METRICS.DRAGON_KILLS` | `dragonKills` | Smites Dragons | StatCardSimple |
 | `METRICS.BARON_KILLS` | `baronKills` | Smites Barons | StatCardSimple |
+| `METRICS.EARLY_PATHING` | `earlyPathing` | Premier Clear | JunglePathingMap |
+| `METRICS.TURRET_DAMAGE` | `damageDealtToBuildings` | Dégâts aux Tourelles | StatCardMain |
+| `METRICS.TURRET_PLATES` | `turretPlatesTaken` | Plaques récupérées | StatCardSimple |
+| `METRICS.FIRST_TOWER_PARTICIPATION` | `firstTowerParticipation` | Course à la 1ère Tour | StatCardSimple |
+| `METRICS.BOT_TOWER_FALL_TIME` | `enemyBotTowerFallTime` | Chute de la T1 Adverse | StatCardSimple |
+| `METRICS.DRAGON_TAKEDOWNS` | `dragonTakedowns` | Dragons | N/A |
+| `METRICS.HERALD_TAKEDOWNS` | `riftHeraldTakedowns` | Hérauts / Grubs | N/A |
+| `METRICS.BARON_TAKEDOWNS` | `baronTakedowns` | Barons | N/A |
+| `METRICS.SUPPORT_TAX` | `supportTax` | Taxe de Lane (CS <10m) | StatCardSimple |
+| `METRICS.VISION_BUDGET_PERCENT` | `visionBudgetPercent` | Budget Vision | StatCardSimple |
+| `METRICS.DAMAGE_PER_GOLD` | `damagePerGold` | Rendement Offensif | StatCardSimple |
+| `METRICS.TANKING_PER_GOLD` | `tankingPerGold` | Rendement Défensif | StatCardSimple |
+| `METRICS.UTILITY_PER_GOLD` | `utilityPerGold` | Rendement Utilitaire | StatCardSimple |
 | `METRICS.ALLY_JUNGLE_CS` | `allyJungleCS` | Jungle Alliée | StatCardSimple |
 | `METRICS.ENEMY_JUNGLE_CS` | `enemyJungleCS` | Jungle Ennemie | N/A |
 | `METRICS.BUFFS_STOLEN` | `buffsStolen` | Buffs Volés | N/A |
 | `METRICS.GOLD_EARNED` | `goldEarned` | Golds Générés | StatCardSimple |
 | `METRICS.EARLY_GOLD` | `earlyGold` | Golds | N/A |
 | `METRICS.EARLY_XP` | `earlyXP` | Expérience (Lvl) | N/A |
+| `METRICS.FIRST_BLOOD_PARTICIPATION` | `firstBloodParticipation` | Participation First Blood | StatCardSimple |
+| `METRICS.EARLY_TAKEDOWNS` | `takedownsFirstXMinutes` | Takedowns Early (<15m) | StatCardSimple |
+| `METRICS.LANE_DOMINATION` | `laningPhaseGoldExpAdvantage` | Domination de Lane | StatCardSimple |
+| `METRICS.ROAMING_KILLS` | `killsOnOtherLanesEarlyJungleAsLaner` | Kills en Roaming | StatCardSimple |
+| `METRICS.OUTNUMBERED_KILLS` | `outnumberedKills` | Kills en infériorité | StatCardSimple |
+| `METRICS.ALLY_SAVED` | `saveAllyFromDeath` | Sauvetages Critiques | StatCardSimple |
 | `METRICS.DUO_WINRATE` | `duo_wr` | Winrate du Duo | N/A |
 | `METRICS.SYNERGY_DELTA` | `synergy_delta` | Synergie (Delta) | StatDelta |
 | `METRICS.DUO_MATCH_VOLUME` | `total_matches` | Volume de parties | N/A |
@@ -61,5 +82,5 @@
 | `TIMELINE_SERIES.OPP_WARDS_KILLED` | `oppKilled` | Détruites (Adv) |
 | `TIMELINE_SERIES.PLAYER_SWEEPING` | `playerWardsKilled` | Nettoyage (Moi) |
 | `TIMELINE_SERIES.OPP_SWEEPING` | `oppWardsKilled` | Nettoyage (Adv) |
-| `TIMELINE_SERIES.TREND_DAMAGE` | `trendDamage` | Tendance DPM |
+| `TIMELINE_SERIES.TREND_DAMAGE` | `trendDamage` | Tendance |
 | `TIMELINE_SERIES.TOTAL_DAMAGE` | `totalDamage` | Joueur |

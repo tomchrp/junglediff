@@ -10,6 +10,10 @@ plutôt que par le système de fichiers ou le bucket S3. Il télécharge les JSO
 bruts depuis MinIO uniquement pour les matchs existants en base, applique le 
 DataTrimmer, et calcule les métriques analytiques à 15 minutes pour enrichir 
 la table MatchParticipant (Hot Storage).
+
+MODIFICATIONS (JUNGLE PATHING) :
+- Le dictionnaire de la requête d'UPDATE intègre désormais les 6 colonnes
+  spatiales issues de `extract_timeline_metrics`.
 ===============================================================================
 """
 
@@ -42,7 +46,7 @@ async def run_backfill():
     2. Pour chaque identifiant, tente de télécharger les détails et la timeline depuis MinIO.
     3. Applique le trimming sur les données récupérées.
     4. Si les deux JSON sont présents, déclenche l'extraction des métriques de snowball 
-       et met à jour la table MatchParticipant.
+       ainsi que des coordonnées spatiales, puis met à jour la table MatchParticipant.
     5. Effectue des commits par lots (batch) pour préserver la mémoire vive.
     """
     logger.info("Démarrage du Backfill via MinIO (Piloté par PostgreSQL)...")
@@ -92,7 +96,7 @@ async def run_backfill():
                         )
                         timelines_updated += 1
 
-                # Extraction et mise à jour des métriques Big Data
+                # Extraction et mise à jour des métriques Big Data et Pathing
                 if trimmed_match and trimmed_timeline:
                     metrics_dict = DataTrimmer.extract_timeline_metrics(trimmed_match, trimmed_timeline)
                     if metrics_dict:
@@ -104,7 +108,14 @@ async def run_backfill():
                                 .values(
                                     gold_diff_15m=m.get("gold_diff_15m"),
                                     xp_diff_15m=m.get("xp_diff_15m"),
-                                    is_snowballing=m.get("is_snowballing")
+                                    is_snowballing=m.get("is_snowballing"),
+                                    # Injection des coordonnées
+                                    pos_f1_x=m.get("pos_f1_x"),
+                                    pos_f1_y=m.get("pos_f1_y"),
+                                    pos_f2_x=m.get("pos_f2_x"),
+                                    pos_f2_y=m.get("pos_f2_y"),
+                                    pos_f3_x=m.get("pos_f3_x"),
+                                    pos_f3_y=m.get("pos_f3_y")
                                 )
                             )
                         metrics_updated += 1
@@ -125,7 +136,7 @@ async def run_backfill():
     logger.info("--- Bilan du Backfill ---")
     logger.info(f"Match Details mis à jour : {matches_updated}")
     logger.info(f"Timelines mises à jour   : {timelines_updated}")
-    logger.info(f"Matchs enrichis (Métriques) : {metrics_updated}")
+    logger.info(f"Matchs enrichis (Métriques et Pathing) : {metrics_updated}")
     logger.info(f"Erreurs rencontrées      : {errors}")
     logger.info("Opération terminée avec succès.")
 

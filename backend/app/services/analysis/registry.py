@@ -6,6 +6,10 @@ PROJET  : JungleDiff
 DESCRIPTION :
 Dictionnaire de configuration absolu (Pattern Registre).
 Lie dynamiquement les rôles et archétypes aux modules statistiques à exécuter.
+
+MODIFICATIONS :
+- Instanciation du JunglePathingModule et injection dans le rôle JUNGLE
+  pour extraire les données spatiales lors de l'orchestration des vues.
 ===============================================================================
 """
 
@@ -19,6 +23,7 @@ from app.services.analysis.modules.objectives.jungle_objectives import JungleObj
 from app.services.analysis.modules.objectives.support_objectives import SupportObjectiveModule
 from app.services.analysis.modules.resources.support_resources import SupportResourceModule
 from app.services.analysis.modules.agency.support_agency import SupportAgencyModule
+from app.services.analysis.modules.pathing.jungle_pathing import JunglePathingModule
 
 # Singleton : Instanciation unique en mémoire lors de l'initialisation de l'API
 support_vision_module = SupportVisionModule()
@@ -31,6 +36,7 @@ jungle_objective_module = JungleObjectiveModule()
 support_objective_module = SupportObjectiveModule()
 support_resource_module = SupportResourceModule()
 support_agency_module = SupportAgencyModule()
+jungle_pathing_module = JunglePathingModule()
 
 ANALYSIS_REGISTRY = {
     "SUPPORT": {
@@ -54,7 +60,8 @@ ANALYSIS_REGISTRY = {
             "combat": assassin_combat_module,
             "objectives": jungle_objective_module,
             "resources": jungle_resource_module,
-            "vision": jungle_vision_module
+            "vision": jungle_vision_module,
+            "pathing": jungle_pathing_module
         }
     }
 }

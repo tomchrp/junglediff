@@ -6,6 +6,11 @@
  * DESCRIPTION :
  * Source Unique de Vérité (Single Source of Truth) pour toutes les métriques
  * métiers affichées dans l'application. 
+ *
+ * MODIFICATIONS (JUNGLE PATHING) :
+ * - Ajout de la constante EARLY_PATHING.
+ * - Association avec la clé backend 'earlyPathing' et le widget par défaut
+ * 'JunglePathingMap' pour le rendu dynamique sans hardcoding.
  * ============================================================================
  */
 
@@ -61,6 +66,11 @@ export const METRICS = {
     DAMAGE_TO_EPIC: { valueKey: 'damageToEpic', defaultLabel: 'Dégâts aux Épiques', defaultWidget: 'StatCardSimple', format: 'number' },
     DRAGON_KILLS: { valueKey: 'dragonKills', defaultLabel: 'Smites Dragons', defaultWidget: 'StatCardSimple', format: 'number' },
     BARON_KILLS: { valueKey: 'baronKills', defaultLabel: 'Smites Barons', defaultWidget: 'StatCardSimple', format: 'number' },
+
+    // ==========================================
+    // SPATIALISATION ET PATHING
+    // ==========================================
+    EARLY_PATHING: { valueKey: 'earlyPathing', defaultLabel: 'Premier Clear', defaultWidget: 'JunglePathingMap' },
 
     // ==========================================
     // OBJECTIFS (LANERS / SUPPORTS)

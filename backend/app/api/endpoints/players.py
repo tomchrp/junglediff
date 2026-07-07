@@ -30,7 +30,7 @@ from app.db.session import get_db
 from app.services.sync_service import SyncService
 from app.services.riot_client import RateLimitExceeded
 from app.db.repositories import PlayerRepository
-from app.db.models import Player, MatchParticipant, Match
+from app.db.models import Player, MatchParticipant, Match, MatchParticipant
 
 router = APIRouter()
 
@@ -273,3 +273,42 @@ async def get_player_analytics(
         data[pos].sort(key=lambda x: (x["gamesPlayed"], x["winrate"]), reverse=True)
 
     return data
+
+@router.get("/{puuid}/jungle-paths")
+async def get_player_jungle_paths(puuid: str, session: AsyncSession = Depends(get_db)):
+    """
+    Récupère et agglomère les coordonnées spatiales du premier clear jungle.
+    
+    Cette fonction effectue une projection directe sur la table 
+    MatchParticipant pour un PUUID donné. Elle filtre de manière stricte :
+    - Uniquement les parties jouées en JUNGLE.
+    - Uniquement les parties où les coordonnées pos_f1_x sont présentes 
+      (pour éliminer les AFK ou les Remakes prématurés).
+    
+    Elle retourne un format JSON imbriqué spécifiquement conçu pour être 
+    consommé nativement par le composant SVG frontend.
+    """
+    stmt = select(
+        MatchParticipant.team_id,
+        MatchParticipant.pos_f1_x, MatchParticipant.pos_f1_y,
+        MatchParticipant.pos_f2_x, MatchParticipant.pos_f2_y,
+        MatchParticipant.pos_f3_x, MatchParticipant.pos_f3_y
+    ).where(
+        MatchParticipant.puuid == puuid,
+        MatchParticipant.team_position == 'JUNGLE',
+        MatchParticipant.pos_f1_x.isnot(None)
+    )
+    
+    result = await session.execute(stmt)
+    rows = result.fetchall()
+    
+    paths = []
+    for row in rows:
+        paths.append({
+            "teamId": row.team_id,
+            "f1": {"x": row.pos_f1_x, "y": row.pos_f1_y},
+            "f2": {"x": row.pos_f2_x, "y": row.pos_f2_y},
+            "f3": {"x": row.pos_f3_x, "y": row.pos_f3_y}
+        })
+        
+    return {"paths": paths}

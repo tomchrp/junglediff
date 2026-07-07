@@ -6,9 +6,11 @@
  * DESCRIPTION :
  * Composant de navigation principale permettant de basculer entre les
  * différentes vues de l'application (Historique, Synergies, Assistant IA,
- * Analyse Globale du Big Data et Meta Duos).
- * * MODIFICATIONS :
+ * Analyse Globale du Big Data, Meta Duos et Premier Clear).
+ * 
+ * MODIFICATIONS :
  * - Ajout du bouton d'accès à l'état META_DUOS.
+ * - Ajout du bouton d'accès à l'état PREMIER_CLEAR pour l'analyse du pathing.
  * ============================================================================
  */
 import React from 'react';
@@ -17,11 +19,13 @@ export default function ViewSelector({ currentView, onViewChange }) {
 
     /**
      * getButtonClass
-     * * DESCRIPTION :
+     * 
+     * DESCRIPTION :
      * Détermine les classes utilitaires Tailwind à appliquer sur un onglet
      * en fonction de son état d'activation, garantissant la cohérence avec
      * le Design System (text-lol-gold pour l'état actif).
-     * * @param {string} viewName - L'identifiant de la vue (ex: 'META_DUOS')
+     * 
+     * @param {string} viewName - L'identifiant de la vue (ex: 'META_DUOS')
      * @returns {string} La chaîne de classes CSS complète
      */
     const getButtonClass = (viewName) => {
@@ -58,12 +62,18 @@ export default function ViewSelector({ currentView, onViewChange }) {
             >
                 Analyse Globale (Big Data)
             </button>
-            {/* NOUVEL ONGLET : META DUOS */}
             <button
                 className={getButtonClass('META_DUOS')}
                 onClick={() => onViewChange('META_DUOS')}
             >
                 Meta Duos
+            </button>
+            {/* NOUVEL ONGLET : PREMIER CLEAR */}
+            <button
+                className={getButtonClass('PREMIER_CLEAR')}
+                onClick={() => onViewChange('PREMIER_CLEAR')}
+            >
+                Premier Clear
             </button>
         </div>
     );

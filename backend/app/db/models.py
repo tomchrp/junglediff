@@ -102,6 +102,14 @@ class MatchParticipant(Base):
     xp_diff_15m = Column(Integer, nullable=True)
     is_snowballing = Column(Boolean, nullable=True)
 
+    # NOUVELLES MÉTRIQUES SPATIALES (Jungle Pathing - Minutes 1, 2 et 3)
+    pos_f1_x = Column(Integer, nullable=True)
+    pos_f1_y = Column(Integer, nullable=True)
+    pos_f2_x = Column(Integer, nullable=True)
+    pos_f2_y = Column(Integer, nullable=True)
+    pos_f3_x = Column(Integer, nullable=True)
+    pos_f3_y = Column(Integer, nullable=True)
+
     player = relationship("Player", back_populates="match_participations")
     match = relationship("Match", back_populates="participants")
 

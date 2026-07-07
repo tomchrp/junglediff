@@ -1,3 +1,22 @@
+/**
+ * ============================================================================
+ * FICHIER : frontend/src/App.jsx
+ * PROJET  : JungleDiff
+ *
+ * DESCRIPTION :
+ * Point d'entrée principal et routeur de l'application frontend.
+ * Gère l'état global (PUUID, filtres de lane/patch), la synchronisation avec
+ * le backend (Data Dragon, ARQ polling) et orchestre le rendu des différentes
+ * vues (Historique, Synergies, Assistant IA, et désormais Premier Clear).
+ *
+ * MODIFICATIONS RÉCENTES :
+ * - Intégration de la logique de routage pour la vue 'PREMIER_CLEAR'.
+ * - Modification de handleViewChange pour forcer le targetLane à 'JUNGLE'
+ *   lorsque l'utilisateur navigue sur la vue de pathing. La Sidebar est ainsi
+ *   mise à jour dynamiquement pour n'afficher que les statistiques Jungle.
+ * ============================================================================
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -12,6 +31,7 @@ import ChatView from './components/chat/ChatView.jsx';
 import { addProfileToHistory } from './services/historyService.js';
 import GlobalChampionsView from './components/global/GlobalChampionsView.jsx';
 import GlobalDuosView from './components/global/GlobalDuosView.jsx';
+import JunglePathingMap from './components/ui/JunglePathingMap.jsx';
 
 function App() {
   const { view: urlView, server: urlServer, riotId: urlRiotId } = useParams();
@@ -45,9 +65,16 @@ function App() {
   const [isInitialLoading, setIsInitialLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  const [junglePaths, setJunglePaths] = useState([]);
+
   const lastIngestedCount = useRef(0);
 
   useEffect(() => {
+    /**
+     * Initialise les données statiques du jeu (Data Dragon).
+     * Récupère la dernière version du jeu puis télécharge le dictionnaire 
+     * des champions pour mapper les IDs numériques avec les noms de champions.
+     */
     const initDataDragon = async () => {
       try {
         const versionRes = await axios.get('https://ddragon.leagueoflegends.com/api/versions.json');
@@ -98,6 +125,12 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlServer, urlRiotId]);
 
+  /**
+   * Orchestre la recherche d'un joueur et déclenche la synchronisation.
+   * Cette fonction complexe réinitialise l'état global, contacte l'API pour 
+   * mettre à jour ou créer le joueur, récupère le résumé de profil et active
+   * le polling en arrière-plan pour surveiller l'ingestion des parties.
+   */
   const handleSearch = async (server, gameName, tagLine) => {
     setIsSyncing(true);
     setErrorMsg(null);
@@ -133,6 +166,12 @@ function App() {
     if (!currentPuuid || !isPollingBackground) return;
     let pollInterval;
 
+    /**
+     * Interroge périodiquement le backend pour connaître l'état d'ingestion 
+     * des données du joueur. Si de nouvelles parties sont détectées, 
+     * un déclencheur de rafraîchissement (refreshTrigger) est mis à jour pour 
+     * forcer le re-rendu des composants enfants dépendants.
+     */
     const checkStatus = async () => {
       try {
         const res = await axios.get(`http://localhost:8000/api/v1/players/${currentPuuid}/sync-status`);
@@ -164,6 +203,11 @@ function App() {
     if (!currentPuuid) return;
     const abortController = new AbortController();
 
+    /**
+     * Récupère les statistiques agrégées des champions joués par l'utilisateur.
+     * Cette fonction réagit aux changements de filtres globaux (lane/patch)
+     * et trie les résultats par volume de jeu puis par taux de victoire.
+     */
     const fetchStats = async () => {
       if (championStats.length === 0) setIsLoadingStats(true);
       try {
@@ -214,6 +258,12 @@ function App() {
     }
   }, [playerSummary, currentServer, isSyncing]);
 
+  /**
+   * Intercepte le changement de vue principale pour appliquer une logique métier.
+   * Agit comme un contrôleur contextuel (Lifting State Up) : par exemple, forcer 
+   * le filtre de rôle sur JUNGLE lorsqu'on accède à la vue Premier Clear pour 
+   * éviter l'affichage de statistiques hors de propos.
+   */
   const handleViewChange = (newView) => {
     if (!playerSummary) return;
 
@@ -224,14 +274,36 @@ function App() {
       const defaultLane = playerSummary?.preferredLane || 'JUNGLE';
       setLaneFilter(defaultLane);
     } else if (newView === 'META_DUOS') {
-      // Réinitialisation par défaut à l'ouverture de la vue
       setPrimaryLane('JUNGLE');
       setSecondaryLane('ALL');
+    } else if (newView === 'PREMIER_CLEAR') {
+      // Force le verrouillage de l'application sur la Jungle pour isoler l'analyse
+      setLaneFilter('JUNGLE');
     }
 
     const safeRiotId = `${playerSummary.riotIdGameName}-${playerSummary.riotIdTagline}`;
     navigate(`/${newView.toLowerCase()}/${currentServer.toLowerCase()}/${safeRiotId}`);
   };
+
+  useEffect(() => {
+    /**
+     * Charge les données agrégées du pathing jungle.
+     * Se déclenche uniquement lorsque l'utilisateur bascule sur la vue 
+     * PREMIER_CLEAR pour éviter des appels réseaux inutiles sur les autres vues.
+     */
+    const fetchJunglePaths = async () => {
+      if (currentMainView === 'PREMIER_CLEAR' && currentPuuid) {
+        try {
+          const res = await axios.get(`http://localhost:8000/api/v1/players/${currentPuuid}/jungle-paths`);
+          setJunglePaths(res.data.paths);
+        } catch (error) {
+          console.error("Erreur lors de la récupération des routes jungle:", error);
+        }
+      }
+    };
+
+    fetchJunglePaths();
+  }, [currentMainView, currentPuuid]);
 
   return (
     <div className="h-screen p-6 overflow-hidden flex flex-col">
@@ -303,7 +375,6 @@ function App() {
                   onPatchChange={setPatchFilter}
                   refreshTrigger={refreshTrigger}
 
-                  // Injections conditionnelles
                   {...(currentMainView === 'SYNERGIES' ? {
                     timeFilter: timeFilter,
                     onTimeFilterChange: setTimeFilter,
@@ -359,7 +430,6 @@ function App() {
                 />
               )}
 
-              {/* NOUVELLE VUE : Explorateur Meta Duos */}
               {currentMainView === 'META_DUOS' && (
                 <GlobalDuosView
                   primaryLane={primaryLane}
@@ -367,6 +437,17 @@ function App() {
                   versionDDragon={versionDDragon}
                   championMap={championMap}
                 />
+              )}
+
+              {/* NOUVELLE VUE : Analyse du First Clear Jungle */}
+              {currentMainView === 'PREMIER_CLEAR' && (
+                <div className="flex flex-col flex-1 min-h-0 bg-surface-solid rounded-lg border border-border-glass p-6 overflow-y-auto">
+                  <h2 className="text-xl font-bold text-gray-100 mb-2 text-center">Analyse du Premier Clear</h2>
+                  <p className="text-center text-lol-info mb-6 text-sm">Le filtre de contexte est verrouillé sur le rôle de Jungler.</p>
+
+                  {/* On passe maintenant le tableau rempli par l'API au lieu de la donnée vide */}
+                  <JunglePathingMap data={junglePaths} />
+                </div>
               )}
             </div>
           </div>
