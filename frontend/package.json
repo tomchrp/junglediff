@@ -11,6 +11,7 @@
     "generate-metrics": "node scripts/generate_metrics_dict.js"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.5",
     "axios": "^1.18.1",
     "lucide-react": "^1.21.0",
     "react": "^19.2.7",

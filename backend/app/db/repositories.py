@@ -11,7 +11,7 @@ frontend React.
 ===============================================================================
 """
 
-from sqlalchemy import select, func, desc, cast, Integer
+from sqlalchemy import select, func, desc, cast, Integer, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -194,3 +194,96 @@ class MatchRepository:
                 }
 
         return {"erreur": "Le joueur spécifié n'a pas été trouvé."}
+
+async def get_global_duos(db: AsyncSession, primary_lane: str, secondary_lane: str):
+    """
+    Extrait les duos globaux depuis la vue matérialisée et calcule le delta de synergie.
+    
+    Cette fonction utilise des Common Table Expressions (CTE) en SQL brut pour :
+    1. Agréger le winrate individuel de chaque champion sur sa lane respective.
+    2. Agréger le winrate spécifique du duo ciblé.
+    3. Joindre les deux ensembles pour calculer le Delta (Winrate Duo - Moyenne des Winrates Individuels).
+    
+    La gestion du paramètre 'ALL' permet de chercher les duos d'une lane avec le reste de la carte.
+    """
+    
+    # Construction dynamique de la clause WHERE selon la présence du filtre secondaire
+    if secondary_lane == "ALL":
+        where_clause = "(subject_lane = :primary OR target_lane = :primary)"
+    else:
+        where_clause = """
+            ((subject_lane = :primary AND target_lane = :secondary) 
+            OR (subject_lane = :secondary AND target_lane = :primary))
+        """
+
+    query = f"""
+        WITH champ_stats AS (
+            SELECT 
+                subject_champion_id AS champ_id,
+                subject_lane AS lane,
+                CAST(SUM(wins_count) AS FLOAT) / NULLIF(SUM(matches_count), 0) AS winrate
+            FROM mv_community_synergies
+            GROUP BY subject_champion_id, subject_lane
+        ),
+        duo_stats AS (
+            SELECT 
+                subject_champion_id AS champ_a,
+                subject_lane AS lane_a,
+                target_champion_id AS champ_b,
+                target_lane AS lane_b,
+                SUM(matches_count) AS total_matches,
+                CAST(SUM(wins_count) AS FLOAT) / NULLIF(SUM(matches_count), 0) AS duo_wr
+            FROM mv_community_synergies
+            WHERE {where_clause}
+            GROUP BY subject_champion_id, subject_lane, target_champion_id, target_lane
+        )
+        SELECT 
+            d.champ_a,
+            d.lane_a,
+            d.champ_b,
+            d.lane_b,
+            d.total_matches,
+            d.duo_wr,
+            c_a.winrate AS wr_a,
+            c_b.winrate AS wr_b,
+            (d.duo_wr - ((c_a.winrate + c_b.winrate) / 2.0)) AS synergy_delta
+        FROM duo_stats d
+        JOIN champ_stats c_a ON d.champ_a = c_a.champ_id AND d.lane_a = c_a.lane
+        JOIN champ_stats c_b ON d.champ_b = c_b.champ_id AND d.lane_b = c_b.lane
+        ORDER BY d.total_matches DESC
+        LIMIT 300;
+    """
+    
+    # Le LIMIT 300 protège la mémoire du frontend sans brider l'analyse de faible volume en DB.
+    result = await db.execute(text(query), {"primary": primary_lane, "secondary": secondary_lane})
+    
+    return [dict(row._mapping) for row in result]
+
+
+async def get_duo_timeline(db: AsyncSession, champ_a: int, lane_a: str, champ_b: int, lane_b: str):
+    """
+    Récupère l'évolution du winrate d'un duo précis en fonction de la durée de jeu.
+    
+    Interroge la vue matérialisée en conservant le regroupement par 'duration_bucket' 
+    (tranches de 5 minutes) pour alimenter le graphique Recharts de la console.
+    """
+    query = """
+        SELECT 
+            duration_bucket,
+            SUM(matches_count) as total_matches,
+            CAST(SUM(wins_count) AS FLOAT) / NULLIF(SUM(matches_count), 0) as winrate
+        FROM mv_community_synergies
+        WHERE 
+            (subject_champion_id = :c_a AND subject_lane = :l_a AND target_champion_id = :c_b AND target_lane = :l_b)
+            OR 
+            (subject_champion_id = :c_b AND subject_lane = :l_b AND target_champion_id = :c_a AND target_lane = :l_a)
+        GROUP BY duration_bucket
+        ORDER BY duration_bucket ASC;
+    """
+    
+    result = await db.execute(text(query), {
+        "c_a": champ_a, "l_a": lane_a,
+        "c_b": champ_b, "l_b": lane_b
+    })
+    
+    return [dict(row._mapping) for row in result]

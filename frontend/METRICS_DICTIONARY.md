@@ -47,6 +47,9 @@
 | `METRICS.GOLD_EARNED` | `goldEarned` | Golds Générés | StatCardSimple |
 | `METRICS.EARLY_GOLD` | `earlyGold` | Golds | N/A |
 | `METRICS.EARLY_XP` | `earlyXP` | Expérience (Lvl) | N/A |
+| `METRICS.DUO_WINRATE` | `duo_wr` | Winrate du Duo | N/A |
+| `METRICS.SYNERGY_DELTA` | `synergy_delta` | Synergie (Delta) | StatDelta |
+| `METRICS.DUO_MATCH_VOLUME` | `total_matches` | Volume de parties | N/A |
 
 ## 2. Séries Temporelles (TIMELINE_SERIES)
 

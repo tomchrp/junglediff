@@ -101,6 +101,13 @@ export const METRICS = {
     ROAMING_KILLS: { valueKey: 'killsOnOtherLanesEarlyJungleAsLaner', defaultLabel: 'Kills en Roaming', defaultWidget: 'StatCardSimple', format: 'number', color: 'text-purple-400', description: 'Kills pris sur d\'autres lanes en Early' },
     OUTNUMBERED_KILLS: { valueKey: 'outnumberedKills', defaultLabel: 'Kills en infériorité', defaultWidget: 'StatCardSimple', format: 'number', color: 'text-lol-loss', description: 'Éliminations réussies en désavantage numérique' },
     ALLY_SAVED: { valueKey: 'saveAllyFromDeath', defaultLabel: 'Sauvetages Critiques', defaultWidget: 'StatCardSimple', format: 'number', color: 'text-emerald-400' },
+
+    // ==========================================
+    // ANALYSE META (DUOS & SYNERGIES)
+    // ==========================================
+    DUO_WINRATE: { valueKey: 'duo_wr', defaultLabel: 'Winrate du Duo', format: 'percentage', color: 'text-gray-100' },
+    SYNERGY_DELTA: { valueKey: 'synergy_delta', defaultLabel: 'Synergie (Delta)', defaultWidget: 'StatDelta', format: 'percentage' },
+    DUO_MATCH_VOLUME: { valueKey: 'total_matches', defaultLabel: 'Volume de parties', format: 'number', color: 'text-lol-textMuted' },
 };
 
 export const TIMELINE_SERIES = {

@@ -11,6 +11,7 @@ import SynergiesMatchupsWrapper from './components/synergies/SynergiesMatchupsWr
 import ChatView from './components/chat/ChatView.jsx';
 import { addProfileToHistory } from './services/historyService.js';
 import GlobalChampionsView from './components/global/GlobalChampionsView.jsx';
+import GlobalDuosView from './components/global/GlobalDuosView.jsx';
 
 function App() {
   const { view: urlView, server: urlServer, riotId: urlRiotId } = useParams();
@@ -28,6 +29,10 @@ function App() {
   // NOUVEAUX ÉTATS : Dédiés à la vue Synergies
   const [timeFilter, setTimeFilter] = useState('recent');
   const [recentCount, setRecentCount] = useState(20);
+
+  // NOUVEAUX ÉTATS : Dédiés à la vue Meta Duos
+  const [primaryLane, setPrimaryLane] = useState('JUNGLE');
+  const [secondaryLane, setSecondaryLane] = useState('ALL');
 
   const [championStats, setChampionStats] = useState([]);
   const [selectedChampion, setSelectedChampion] = useState(null);
@@ -218,6 +223,10 @@ function App() {
     } else if (newView === 'SYNERGIES' && laneFilter === 'ALL') {
       const defaultLane = playerSummary?.preferredLane || 'JUNGLE';
       setLaneFilter(defaultLane);
+    } else if (newView === 'META_DUOS') {
+      // Réinitialisation par défaut à l'ouverture de la vue
+      setPrimaryLane('JUNGLE');
+      setSecondaryLane('ALL');
     }
 
     const safeRiotId = `${playerSummary.riotIdGameName}-${playerSummary.riotIdTagline}`;
@@ -293,12 +302,21 @@ function App() {
                   onLaneChange={setLaneFilter}
                   onPatchChange={setPatchFilter}
                   refreshTrigger={refreshTrigger}
-                  // Injection conditionnelle pour switcher le rendu de FilterBar
+
+                  // Injections conditionnelles
                   {...(currentMainView === 'SYNERGIES' ? {
                     timeFilter: timeFilter,
                     onTimeFilterChange: setTimeFilter,
                     recentCount: recentCount,
                     onRecentCountChange: setRecentCount
+                  } : {})}
+
+                  {...(currentMainView === 'META_DUOS' ? {
+                    isMetaDuosMode: true,
+                    primaryLane: primaryLane,
+                    secondaryLane: secondaryLane,
+                    onPrimaryChange: setPrimaryLane,
+                    onSecondaryChange: setSecondaryLane
                   } : {})}
                 />
               </div>
@@ -336,6 +354,16 @@ function App() {
 
               {currentMainView === 'ANALYSE_GLOBALE' && (
                 <GlobalChampionsView
+                  versionDDragon={versionDDragon}
+                  championMap={championMap}
+                />
+              )}
+
+              {/* NOUVELLE VUE : Explorateur Meta Duos */}
+              {currentMainView === 'META_DUOS' && (
+                <GlobalDuosView
+                  primaryLane={primaryLane}
+                  secondaryLane={secondaryLane}
                   versionDDragon={versionDDragon}
                   championMap={championMap}
                 />

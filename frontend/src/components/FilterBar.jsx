@@ -4,12 +4,13 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Barre transversale de filtrage permettant d'affiner le contexte analytique.
- * * MODIFICATIONS (Phase 3) :
- * - Intégration d'un rendu hybride (Pattern "Segmented Control").
- * - Rétrocompatibilité : Si le composant reçoit `timeFilter`, il affiche la
- * nouvelle logique Carrière/Récent (pour la vue Synergies). Sinon, il 
- * conserve son comportement original avec le sélecteur de Patch (pour l'Historique).
+ * Barre transversale de filtrage centralisée pour l'application.
+ * * * MODIFICATIONS (Phase 4 - Meta Duos) :
+ * - Intégration du mode `isMetaDuosMode`.
+ * - Transforme le composant pour gérer 3 états distincts : 
+ * 1. Historique (Lane + Patch)
+ * 2. Synergies (Lane + Contexte Temporel Carrière/Récent)
+ * 3. Meta Duos (Lane d'ancrage + Lane de croisement)
  * ============================================================================
  */
 import React, { useState, useEffect } from 'react';
@@ -27,25 +28,36 @@ const LANES = [
 ];
 
 const FilterBar = ({
+    // Props de base (Historique)
     puuid,
     currentLane,
     currentPatch,
     onLaneChange,
     onPatchChange,
     refreshTrigger,
-    // Nouvelles props optionnelles pour la vue Synergies
+
+    // Props optionnelles (Vue Synergies)
     timeFilter,
     onTimeFilterChange,
     recentCount,
-    onRecentCountChange
+    onRecentCountChange,
+
+    // Props optionnelles (Vue Meta Duos)
+    isMetaDuosMode,
+    primaryLane,
+    secondaryLane,
+    onPrimaryChange,
+    onSecondaryChange
 }) => {
     const [availablePatches, setAvailablePatches] = useState([]);
 
-    // Détection du mode : Sommes-nous dans la vue Synergies ou Historique ?
-    const isSynergiesMode = typeof onTimeFilterChange === 'function';
+    // Déduction sémantique des modes pour la lisibilité
+    const isSynergiesMode = typeof onTimeFilterChange === 'function' && !isMetaDuosMode;
+    const isHistoryMode = !isSynergiesMode && !isMetaDuosMode;
 
     useEffect(() => {
-        if (!puuid) {
+        // En mode Meta globale, on ne requiert pas l'API joueur pour les patchs
+        if (!puuid || isMetaDuosMode) {
             setAvailablePatches([]);
             return;
         }
@@ -60,8 +72,11 @@ const FilterBar = ({
         };
 
         fetchPatches();
-    }, [puuid, refreshTrigger]);
+    }, [puuid, refreshTrigger, isMetaDuosMode]);
 
+    // ==========================================
+    // LOGIQUE : HISTORIQUE & SYNERGIES
+    // ==========================================
     const handleLaneToggle = (laneId) => {
         if (currentLane === laneId && laneId !== 'ALL') {
             onLaneChange('ALL');
@@ -70,6 +85,29 @@ const FilterBar = ({
         }
     };
 
+    // ==========================================
+    // LOGIQUE : META DUOS (Règles d'exclusion)
+    // ==========================================
+    const handlePrimaryClick = (laneId) => {
+        if (laneId === secondaryLane) {
+            onSecondaryChange('ALL');
+        }
+        onPrimaryChange(laneId);
+    };
+
+    const handleSecondaryClick = (laneId) => {
+        if (laneId === primaryLane) return; // Empêche la même lane
+
+        if (secondaryLane === laneId) {
+            onSecondaryChange('ALL'); // Toggle off
+        } else {
+            onSecondaryChange(laneId);
+        }
+    };
+
+    // ==========================================
+    // OPTIONS DES SELECTS
+    // ==========================================
     const patchOptions = [
         { value: 'ALL', label: 'Tous les Patchs' },
         ...availablePatches.map(patch => ({ value: patch, label: `Patch ${patch}` }))
@@ -81,13 +119,92 @@ const FilterBar = ({
         { value: 60, label: '60 dernières parties' }
     ];
 
+    // ==========================================
+    // RENDU : MODE META DUOS (Double ligne)
+    // ==========================================
+    if (isMetaDuosMode) {
+        return (
+            <div className="glass-panel p-4 flex flex-col gap-4 z-40 relative border-b border-border-glass">
+                {/* Ligne 1 : Rôle Principal (Ancrage) */}
+                <div className="flex items-center gap-4">
+                    <span className="text-lol-textMuted text-xs font-bold uppercase tracking-wider w-32">
+                        Rôle d'ancrage :
+                    </span>
+                    <div className="flex gap-2 items-center">
+                        {LANES.map(lane => (
+                            <button
+                                key={`primary-${lane.id}`}
+                                onClick={() => handlePrimaryClick(lane.id)}
+                                title={lane.label}
+                                className="transition-transform hover:scale-105 outline-none focus:outline-none rounded-md"
+                            >
+                                <Avatar
+                                    type="rune"
+                                    size="sm"
+                                    src={`/assets/lanes/${lane.icon}.png`}
+                                    alt={lane.label}
+                                    isSelected={primaryLane === lane.id}
+                                />
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Ligne 2 : Rôle Secondaire (Croisement) */}
+                <div className="flex items-center gap-4">
+                    <span className="text-lol-textMuted text-xs font-bold uppercase tracking-wider w-32">
+                        Croiser avec :
+                    </span>
+                    <div className="flex gap-2 items-center">
+                        <button
+                            onClick={() => onSecondaryChange('ALL')}
+                            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors border ${secondaryLane === 'ALL'
+                                    ? 'bg-surface-elevated text-lol-gold border-lol-gold/50'
+                                    : 'border-transparent text-gray-500 hover:text-gray-300'
+                                }`}
+                        >
+                            Toutes Lanes
+                        </button>
+
+                        <div className="h-4 w-px bg-border-glass mx-1"></div>
+
+                        {LANES.map(lane => {
+                            const isPrimary = lane.id === primaryLane;
+                            return (
+                                <button
+                                    key={`secondary-${lane.id}`}
+                                    onClick={() => handleSecondaryClick(lane.id)}
+                                    disabled={isPrimary}
+                                    title={isPrimary ? "Déjà sélectionné en rôle principal" : lane.label}
+                                    className={`transition-transform outline-none focus:outline-none rounded-md ${isPrimary ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:scale-105'
+                                        }`}
+                                >
+                                    <Avatar
+                                        type="rune"
+                                        size="sm"
+                                        src={`/assets/lanes/${lane.icon}.png`}
+                                        alt={lane.label}
+                                        isSelected={secondaryLane === lane.id}
+                                    />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // RENDU : MODE STANDARD (Historique / Synergies)
+    // ==========================================
     return (
         <div className="glass-panel p-3 flex flex-wrap gap-4 items-center z-40 relative">
             <span className="text-lol-textMuted text-sm font-semibold uppercase tracking-wider ml-2 mr-2">
                 Filtres :
             </span>
 
-            {/* Section Rôles (Lanes) - Commune à toutes les vues */}
+            {/* Section Rôles (Lanes) */}
             <div className="flex gap-2 items-center">
                 {LANES.map(lane => (
                     <button
@@ -107,10 +224,9 @@ const FilterBar = ({
                 ))}
             </div>
 
-            {/* Séparateur visuel */}
             <div className="h-8 w-px bg-border-glass mx-2"></div>
 
-            {/* Rendu Conditionnel du Contexte Temporel */}
+            {/* Section Contexte Temporel */}
             {isSynergiesMode ? (
                 <div className="flex items-center gap-4">
                     <div className="flex bg-surface-elevated rounded-md p-1 border border-border-glass shadow-inner">

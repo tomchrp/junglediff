@@ -417,3 +417,22 @@ Une anomalie majeure d'héritage de l'API Riot (champ lane de la V4 taggué en N
 * **Déduplication Hot Storage** : L'architecture du modèle MatchParticipant a été nettoyée. Les données historiques exactes ont été transférées massivement via une commande SQL vers la colonne métier lane, et la colonne redondante position a été détruite pour garantir une source de vérité unique (SSOT).
 
 * **Diagnostic Frontend (Laboratoire Big Data)** : Ajout d'une colonne de répartition spatiale (Lanes) par champion dans la vue globale pour monitorer et auditer la viabilité des classifications Riot en temps réel (ex: Détection et compréhension des biais algorithmiques comme le cas du "Fasting Senna").
+
+## 17. Analyse Globale (Meta Duos) et Optimisation du Rendu DOM
+
+Afin d'exploiter les données massives du Crawler et d'offrir une exploration macroscopique de la meta, une nouvelle vue dédiée aux synergies globales ("Meta Duos") a été implémentée. Face au volume de combinaisons possibles, des choix architecturaux stricts ont été appliqués côté client pour garantir les performances.
+
+### 17.1. Virtualisation du DOM (Windowing)
+L'affichage de milliers de duos (combinaisons croisées) dans une liste standard figeait le moteur de rendu du navigateur et surchargeait la RAM.
+* **Rendu Partiel (`@tanstack/react-virtual`) :** L'application n'instancie plus l'intégralité des nœuds HTML. Seules les cartes strictement visibles à l'écran (plus un *overscan* de 5 éléments pour fluidifier le défilement) sont montées en mémoire.
+* **Positionnement Absolu Dynamique :** Le conteneur parent calcule dynamiquement sa hauteur totale virtuelle, tandis que les enfants sont positionnés en absolu (via `transform: translateY`). Cela garantit un défilement natif à 60 FPS sans "Layout Shifts", même avec plusieurs dizaines de milliers de lignes de données.
+
+### 17.2. Résolution du "Split-Brain" et Déduplication Client
+Le backend relationnel extrait les affrontements de manière brute depuis les vues matérialisées[cite: 6] (ex: Ligne 1: A avec B / Ligne 2: B avec A). Pour éviter l'apparition de doublons visuels ayant des statistiques croisées identiques :
+* **Clé Composite Triée :** Le frontend implémente un `Set` de déduplication algorithmique au niveau de l'orchestrateur. Chaque duo génère une clé lexicographique stricte (ex: `[id_A, id_B].sort().join('-')`), purgeant la liste avant le tri métier.
+* **Ancrage Visuel Dynamique (UX) :** Pour faciliter le scan vertical par l'utilisateur, le composant `<DuoRowCard>` calcule dynamiquement sa disposition interne. Le champion correspondant à la lane primaire (le filtre "d'ancrage") est toujours forcé sur l'encart de gauche de la carte et de la console, effectuant un pivot (swap) des portraits et des données à la volée si la base de données les avait renvoyés dans le sens inverse.
+
+### 17.3. Consolidation du Layout Master-Detail et Routage d'États
+La topologie visuelle réutilise les concepts de Layout étirable éprouvés par la vue Synergies[cite: 6].
+* **Flexbox Fluide :** L'interface abandonne les superpositions en position absolue au profit d'un partage d'espace strict (`basis-1/2`). Lors de l'ouverture de la console temporelle d'analyse de *Power Spikes*, la liste virtuelle s'écrase proprement vers le haut sans masquer la moindre donnée, préservant les coins arrondis et le Glassmorphism du Design System.
+* **Filtres Hybrides Segmentés :** La `FilterBar` globale a été refactorisée pour agir selon un pattern conditionnel. En mode "Meta Duos", elle abandonne le sélecteur temporel pour exposer deux rangées distinctes (Rôle Primaire et Secondaire). Cette ségrégation visuelle prévient les conflits d'états illogiques (ex: bloquer la sélection de deux rôles identiques) via des règles d'exclusion appliquées avant même la requête API.

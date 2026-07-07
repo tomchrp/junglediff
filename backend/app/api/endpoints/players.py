@@ -10,6 +10,11 @@ de polling (sync-status) qui a été modifiée pour renvoyer le nombre de partie
 ingérées en temps réel.
 Intègre le mécanisme "Offline-First" absolu pour permettre l'utilisation
 de l'application même lorsque l'API Riot est bloquée par le crawler.
+
+MODIFICATIONS :
+- Correction d'attributs SQLAlchemy (AttributeError) : Remplacement exclusif de 
+  l'ancien attribut obsolète `position` par `lane` suite à la déduplication de 
+  la base de données (Topographie Match-V5).
 ===============================================================================
 """
 
@@ -103,7 +108,7 @@ async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
     # 1. Sous-requête : Restreindre l'échantillon aux 60 dernières parties du joueur
     # (Correspond au volume de l'ingestion initiale : 20 Solo, 20 Flex, 20 Normal)
     recent_matches_subq = (
-        select(MatchParticipant.position)
+        select(MatchParticipant.lane)
         .join(Match, MatchParticipant.match_id == Match.match_id)
         .where(MatchParticipant.puuid == puuid)
         .order_by(Match.creation_timestamp.desc())
@@ -113,10 +118,10 @@ async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
 
     # 2. Requête principale : Grouper, compter et récupérer la position dominante
     pref_lane_query = (
-        select(recent_matches_subq.c.position)
+        select(recent_matches_subq.c.lane)
         # On exclut les positions invalides que l'API Riot renvoie parfois (ex: ARAM, Arena)
-        .where(recent_matches_subq.c.position.notin_(["", "INVALID"]))
-        .group_by(recent_matches_subq.c.position)
+        .where(recent_matches_subq.c.lane.notin_(["", "INVALID"]))
+        .group_by(recent_matches_subq.c.lane)
         .order_by(func.count().desc())
         .limit(1)
     )
@@ -207,7 +212,7 @@ async def get_player_analytics(
     # 1. Conditions strictes identifiant le joueur et son rôle
     conditions = [
         mp1.puuid == puuid,
-        mp1.position == lane
+        mp1.lane == lane
     ]
     
     # 2. Ajout dynamique du filtre de champion si sélectionné
@@ -216,7 +221,7 @@ async def get_player_analytics(
 
     # 3. Requête d'agrégation : On compte les apparitions de mp2 et les victoires de mp1
     q = select(
-        mp2.position,
+        mp2.lane,
         mp2.champion_id,
         func.count().label("games_played"),
         func.sum(case((mp1.win == True, 1), else_=0)).label("wins")
@@ -239,7 +244,7 @@ async def get_player_analytics(
         q = q.where(mp1.team_id != mp2.team_id)
 
     q = q.where(*conditions)
-    q = q.group_by(mp2.position, mp2.champion_id)
+    q = q.group_by(mp2.lane, mp2.champion_id)
 
     result = await db.execute(q)
     rows = result.all()
@@ -248,7 +253,7 @@ async def get_player_analytics(
     data = {"TOP": [], "JUNGLE": [], "MIDDLE": [], "BOTTOM": [], "UTILITY": []}
     
     for row in rows:
-        pos = row.position
+        pos = row.lane
         if pos not in data:
             continue
             
