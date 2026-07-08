@@ -98,7 +98,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
     const durationMin = Math.floor(info.gameDuration / 60);
     const durationSec = info.gameDuration % 60;
     const timeFormatted = `${durationMin}:${durationSec < 10 ? `0${durationSec}` : durationSec}`;
-    
+
     const queueId = info.queueId || match.queueId || match.queue_id || match.metadata?.queueId;
     const queueName = queueId ? (QUEUE_MAPPING[queueId] || 'Inconnu') : 'Inconnu';
 
@@ -173,7 +173,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                 if (prefetchIds.length > 0) {
                     fetch(`http://localhost:8000/api/v1/matches/${matchId}/timeline/status?puuid=${playerPuuid}&server=${currentServer}&prefetch_ids=${prefetchIds.join(',')}`).catch(() => { });
                 }
-            } catch (e) {}
+            } catch (e) { }
         };
 
         if (isOpen && !hasTimeline) {
@@ -197,14 +197,14 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
     };
 
     const accentClass = isWin ? 'border-l-lol-win' : 'border-l-lol-loss';
-    const kdaRatio = currentPlayer.deaths > 0 
-        ? ((currentPlayer.kills + currentPlayer.assists) / currentPlayer.deaths).toFixed(2) 
+    const kdaRatio = currentPlayer.deaths > 0
+        ? ((currentPlayer.kills + currentPlayer.assists) / currentPlayer.deaths).toFixed(2)
         : 'Parfait';
 
     return (
         <div className={`mb-3 glass-panel border-l-4 overflow-hidden transition-all duration-200 ease-in-out ${accentClass}`}>
             <div onClick={handleCardClick} className="px-5 py-4 flex items-center justify-between w-full select-none cursor-pointer hover:bg-white/5 transition-colors">
-                
+
                 {/* 1. Bloc Métadonnées */}
                 <div className="w-[80px] shrink-0 flex flex-col items-center justify-center text-center">
                     <div className="text-gray-100 font-bold text-xs uppercase tracking-wide">
@@ -288,28 +288,28 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     <div className="flex gap-1 items-center shrink-0">
                         <div className="flex flex-col gap-0.5">
                             {[currentPlayer.summoner1Id, currentPlayer.summoner2Id].map((id, index) => (
-                                <Avatar 
-                                    key={index} 
-                                    type="spell" 
-                                    size="xs" 
-                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/spell/${SUMMONER_SPELLS[id] || "SummonerFlash"}.png`} 
-                                    alt="Sort" 
+                                <Avatar
+                                    key={index}
+                                    type="spell"
+                                    size="xs"
+                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/spell/${SUMMONER_SPELLS[id] || "SummonerFlash"}.png`}
+                                    alt="Sort"
                                 />
                             ))}
                         </div>
                         <div className="flex flex-col gap-0.5">
-                            <Avatar 
-                                type="rune" 
-                                size="xs" 
-                                src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/${keystonePath}.png`} 
-                                alt="Keystone" 
+                            <Avatar
+                                type="rune"
+                                size="xs"
+                                src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/${keystonePath}.png`}
+                                alt="Keystone"
                             />
-                            <Avatar 
-                                type="rune" 
-                                size="xs" 
-                                src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${RUNE_PATHS[currentPlayer.perks?.subStyle] || "7201_Precision"}.png`} 
-                                alt="Rune secondaire" 
-                                className="opacity-70" 
+                            <Avatar
+                                type="rune"
+                                size="xs"
+                                src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${RUNE_PATHS[currentPlayer.perks?.subStyle] || "7201_Precision"}.png`}
+                                alt="Rune secondaire"
+                                className="opacity-70"
                             />
                         </div>
                     </div>
@@ -317,12 +317,12 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     <div className="flex gap-1 shrink-0">
                         {[currentPlayer.item0, currentPlayer.item1, currentPlayer.item2, currentPlayer.item3, currentPlayer.item4, currentPlayer.item5, currentPlayer.item6].map((itemId, idx) => (
                             itemId > 0 ? (
-                                <Avatar 
-                                    key={idx} 
-                                    type="item" 
-                                    size="sm" 
-                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/item/${itemId}.png`} 
-                                    alt="Objet" 
+                                <Avatar
+                                    key={idx}
+                                    type="item"
+                                    size="sm"
+                                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/item/${itemId}.png`}
+                                    alt="Objet"
                                 />
                             ) : (
                                 <div key={idx} className="w-7 h-7 bg-surface-solid rounded-md border border-border-glass shrink-0"></div>
@@ -335,12 +335,12 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                 <div className="flex flex-col gap-[3px] shrink-0 w-[110px]">
                     <div className="flex gap-[2px]">
                         {sortedTeam100.map(p => (
-                            <Avatar 
-                                key={p.puuid} 
-                                type="champion" 
-                                size="xs" 
+                            <Avatar
+                                key={p.puuid}
+                                type="champion"
+                                size="xs"
                                 isSelected={p.puuid === playerPuuid}
-                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`} 
+                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`}
                                 alt={getChampionImageName(p.championId)}
                                 className={p.puuid !== playerPuuid ? "opacity-80" : ""}
                             />
@@ -348,12 +348,12 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     </div>
                     <div className="flex gap-[2px]">
                         {sortedTeam200.map(p => (
-                            <Avatar 
-                                key={p.puuid} 
-                                type="champion" 
-                                size="xs" 
+                            <Avatar
+                                key={p.puuid}
+                                type="champion"
+                                size="xs"
                                 isSelected={p.puuid === playerPuuid}
-                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`} 
+                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`}
                                 alt={getChampionImageName(p.championId)}
                                 className={p.puuid !== playerPuuid ? "opacity-80" : ""}
                             />

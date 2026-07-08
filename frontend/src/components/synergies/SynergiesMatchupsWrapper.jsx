@@ -4,20 +4,24 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Contrôleur de la vue Synergies et Matchups. Il orchestre la récupération
- * des données, gère les états de filtrage et transmet les props aux grilles
- * et graphiques.
- * * MODIFICATIONS :
- * - Correction d'une erreur de référence fantôme. L'application utilise 
- * exclusivement l'utilitaire getWinrateColorClass pour colorer les pourcentages.
+ * Contrôleur principal de la vue Synergies et Matchups (Smart Component).
+ * Gère l'état global de la vue, orchestre les requêtes réseau vers le Data Lake,
+ * maintient la persistance du contexte lors des changements de filtres, et assemble
+ * les primitives de mise en page (SplitDataViewLayout, DetailConsole).
+ * * MODIFICATIONS (Phase 3.5 Refacto) :
+ * - Suppression totale du code de mise en page redondant.
+ * - Délégation du conteneur de graphique à DetailConsole.
+ * - Délégation du layout Flexbox à SplitDataViewLayout.
  * ============================================================================
  */
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import SubViewSelector from './SubViewSelector.jsx';
 import LaneGrid from './LaneGrid.jsx';
-import Avatar from '../ui/Avatar.jsx';
-import MatchupTimeChart from './MatchupTimeChart.jsx';
+import UniversalTimelineChart from '../ui/charts/UniversalTimelineChart.jsx';
+import SplitDataViewLayout from '../layouts/SplitDataViewLayout.jsx';
+import DetailConsole from '../ui/DetailConsole.jsx';
+import { getWinrateColorClass } from '../../core/utils/formatters.js';
 
 const LANE_NAMES = {
     TOP: 'TOP',
@@ -28,12 +32,40 @@ const LANE_NAMES = {
 };
 
 /**
- * Détermine la classe CSS de couleur textuelle en fonction du taux de victoire.
- * @param {number} wr - Le winrate à évaluer.
- * @returns {string} La classe Tailwind correspondante (victoire ou défaite).
+ * Composant de bulle d'information (Tooltip) injecté dans le graphique Recharts.
+ * Affiche le taux de victoire croisé entre le référentiel de la communauté et 
+ * les statistiques personnelles du joueur pour une tranche de temps donnée.
  */
-const getWinrateColorClass = (wr) => {
-    return wr >= 50 ? 'text-lol-win' : 'text-lol-loss';
+const CustomMatchupTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        const hasPlayerData = data.player_matches > 0;
+
+        return (
+            <div className="bg-surface-solid border border-border-strong rounded shadow-lg p-3 text-xs min-w-[200px] z-50">
+                <p className="font-bold text-gray-200 mb-2 pb-1 border-b border-border-glass">
+                    Autour de {label} minutes
+                </p>
+                <div className="flex flex-col gap-2">
+                    <div>
+                        <p className="text-lol-gold font-bold flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-lol-gold inline-block"></span>
+                            Joueur : {hasPlayerData ? `${data.player_winrate}%` : 'Aucune partie'}
+                        </p>
+                        {hasPlayerData && <p className="text-gray-400 pl-4 mt-0.5">({data.player_wins}V / {data.player_matches} parties)</p>}
+                    </div>
+                    <div>
+                        <p className="text-gray-300 font-bold flex items-center gap-1.5 mt-1">
+                            <span className="w-2 h-2 rounded-full bg-white/30 inline-block"></span>
+                            Communauté : {data.global_winrate}%
+                        </p>
+                        <p className="text-gray-500 pl-4 mt-0.5">({data.global_matches} parties)</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    return null;
 };
 
 export default function SynergiesMatchupsWrapper({
@@ -59,11 +91,11 @@ export default function SynergiesMatchupsWrapper({
     /**
      * Gère la récupération asynchrone des données d'analyse croisée et la 
      * persistance de la sélection utilisateur.
-     * Cette fonction construit l'URL avec les paramètres dynamiques,
-     * gère l'annulation des requêtes obsolètes en plein vol (AbortController),
-     * met à jour le state des données, puis tente de retrouver et restaurer 
-     * le champion précédemment sélectionné dans le nouveau set de données 
-     * pour éviter que le panneau de détail ne se ferme inopinément.
+     * Construit l'URL avec les paramètres dynamiques, gère l'annulation des 
+     * requêtes obsolètes en plein vol (AbortController), met à jour le state 
+     * des données, puis tente de retrouver et restaurer le champion précédemment 
+     * sélectionné dans le nouveau set de données pour éviter que le panneau 
+     * de détail ne se ferme inopinément lors d'un changement de filtre.
      */
     useEffect(() => {
         if (laneFilter === 'ALL') return;
@@ -114,7 +146,6 @@ export default function SynergiesMatchupsWrapper({
         };
 
         fetchAnalytics();
-
         return () => abortController.abort();
     }, [puuid, laneFilter, activeSubView, timeFilter, recentCount, selectedChampion]);
 
@@ -152,73 +183,105 @@ export default function SynergiesMatchupsWrapper({
 
     let globalMatches = 0;
     let globalWinrate = 0;
+    let playerAvatarSrc = null;
+    let targetAvatarSrc = null;
+
     if (selectedMatchup) {
         globalMatches = selectedMatchup.timeline.reduce((acc, b) => acc + b.global_matches, 0);
         globalWinrate = parseFloat((selectedMatchup.player_stats.winrate - selectedMatchup.player_stats.delta).toFixed(1));
+
+        targetAvatarSrc = `https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${championMap[selectedMatchup.champion_id].replace(/\s+/g, '')}.png`;
+        if (selectedChampion) {
+            playerAvatarSrc = `https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${championMap[selectedChampion].replace(/\s+/g, '')}.png`;
+        }
     }
+
+    const masterContent = (
+        <>
+            {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-app/80 backdrop-blur-sm z-10 rounded-md">
+                    <span className="text-lol-gold font-bold tracking-widest uppercase animate-pulse">Calcul...</span>
+                </div>
+            )}
+            <LaneGrid
+                mode={activeSubView}
+                currentLane={laneFilter}
+                data={analyticsData}
+                versionDDragon={versionDDragon}
+                championMap={championMap}
+                selectedChampionId={selectedMatchup?.champion_id}
+                selectedTargetLane={selectedMatchup?.targetLane}
+                onSelectMatchup={setSelectedMatchup}
+            />
+        </>
+    );
+
+    const detailContent = selectedMatchup ? (
+        <DetailConsole
+            onClose={() => setSelectedMatchup(null)}
+            leftAvatar={playerAvatarSrc || targetAvatarSrc}
+            rightAvatar={playerAvatarSrc ? targetAvatarSrc : null}
+            title={getContextualTitle()}
+            subtitle={
+                <div className="flex flex-wrap items-center gap-2">
+                    <span>
+                        Joueur : <span className="text-white font-bold">{selectedMatchup.player_stats.matches} parties</span>
+                        {' '}(<span className={`font-bold ${getWinrateColorClass(selectedMatchup.player_stats.winrate)}`}>{selectedMatchup.player_stats.winrate.toFixed(1)}%</span>)
+                    </span>
+                    <span className="text-border-glass">|</span>
+                    <span title="Référentiel exact de cette paire (Indépendant du joueur)">
+                        Communauté : <span className="text-white font-bold">{globalMatches} parties</span>
+                        {' '}(<span className={`font-bold ${getWinrateColorClass(globalWinrate)}`}>{globalWinrate}%</span>)
+                    </span>
+                </div>
+            }
+        >
+            <UniversalTimelineChart
+                height="h-full"
+                data={selectedMatchup.timeline}
+                xAxisKey="bucket"
+                formatXAxis={(value) => `${value}m`}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                customTooltip={<CustomMatchupTooltip />}
+                yAxisConfig={{
+                    domain: [0, 100],
+                    ticks: [0, 25, 50, 75, 100],
+                    tickFormatter: (value) => `${value}%`
+                }}
+                areas={[
+                    {
+                        name: "Référentiel Communauté",
+                        dataKey: "global_winrate",
+                        fill: "#ffffff",
+                        fillOpacity: 0.05,
+                        stroke: "#ffffff",
+                        strokeOpacity: 0.2
+                    }
+                ]}
+                lines={[
+                    {
+                        name: "Performances Joueur",
+                        dataKey: "player_winrate",
+                        color: "#C89B3C",
+                        strokeWidth: 3,
+                        dot: { r: 4, fill: '#C89B3C', stroke: '#111', strokeWidth: 2 },
+                        activeDot: { r: 6, fill: '#fff' },
+                        connectNulls: true
+                    }
+                ]}
+            />
+        </DetailConsole>
+    ) : null;
 
     return (
         <div className="flex-1 glass-panel flex flex-col p-4 min-h-0 gap-4">
             <SubViewSelector activeView={activeSubView} onViewChange={setActiveSubView} />
-
-            <div className={`transition-all duration-300 min-h-0 flex flex-col relative ${selectedMatchup ? 'basis-1/2' : 'basis-full'}`}>
-                {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-app/80 backdrop-blur-sm z-10 rounded-md">
-                        <span className="text-lol-gold font-bold tracking-widest uppercase animate-pulse">Calcul...</span>
-                    </div>
-                )}
-                <LaneGrid
-                    mode={activeSubView}
-                    currentLane={laneFilter}
-                    data={analyticsData}
-                    versionDDragon={versionDDragon}
-                    championMap={championMap}
-                    selectedChampionId={selectedMatchup?.champion_id}
-                    selectedTargetLane={selectedMatchup?.targetLane}
-                    onSelectMatchup={setSelectedMatchup}
-                />
-            </div>
-
-            {selectedMatchup && (
-                <div className="basis-1/2 min-h-0 flex flex-col bg-surface-solid border border-lol-gold/40 rounded-md p-4 animate-in slide-in-from-bottom-4 shadow-glass">
-                    <div className="flex justify-between items-start shrink-0 border-b border-border-glass pb-3 mb-3">
-                        <div className="flex items-center gap-4">
-                            <Avatar
-                                src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${championMap[selectedMatchup.champion_id].replace(/\s+/g, '')}.png`}
-                                size="base"
-                                type="champion"
-                            />
-                            <div className="flex flex-col gap-1">
-                                <h3 className="text-lol-gold font-bold text-sm tracking-widest uppercase">
-                                    {getContextualTitle()}
-                                </h3>
-                                <p className="text-gray-300 text-xs font-medium flex flex-wrap items-center gap-2">
-                                    <span>
-                                        Joueur : <span className="text-white font-bold">{selectedMatchup.player_stats.matches} parties</span>
-                                        {' '}(<span className={`font-bold ${getWinrateColorClass(selectedMatchup.player_stats.winrate)}`}>{selectedMatchup.player_stats.winrate.toFixed(1)}%</span>)
-                                    </span>
-                                    <span className="text-border-glass">|</span>
-                                    <span title="Référentiel exact de cette paire (Indépendant du joueur)">
-                                        Communauté : <span className="text-white font-bold">{globalMatches} parties</span>
-                                        {' '}(<span className={`font-bold ${getWinrateColorClass(globalWinrate)}`}>{globalWinrate}%</span>)
-                                    </span>
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setSelectedMatchup(null)}
-                            className="text-gray-500 hover:text-red-400 transition-colors p-1 px-3 rounded hover:bg-white/5 text-lg font-bold"
-                            title="Fermer l'analyse"
-                        >
-                            ✕
-                        </button>
-                    </div>
-
-                    <div className="flex-1 min-h-0">
-                        <MatchupTimeChart timeline={selectedMatchup.timeline} />
-                    </div>
-                </div>
-            )}
+            <SplitDataViewLayout
+                masterContent={masterContent}
+                detailContent={detailContent}
+                isDetailOpen={!!selectedMatchup}
+                detailContainerClassName=""
+            />
         </div>
     );
 }

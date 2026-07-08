@@ -121,13 +121,13 @@ export const METRICS = {
 };
 
 export const TIMELINE_SERIES = {
-    // Vision
-    PLAYER_WARDS_PLACED: { dataKey: 'playerPlaced', defaultName: 'Posées (Moi)', color: '#0ea5e9', strokeWidth: 2, showDots: true },
-    OPP_WARDS_PLACED: { dataKey: 'oppPlaced', defaultName: 'Posées (Adv)', color: '#ef4444', strokeWidth: 2, showDots: true },
-    PLAYER_WARDS_KILLED: { dataKey: 'playerKilled', defaultName: 'Détruites (Moi)', color: '#38bdf8', strokeWidth: 2, isDashed: true, showDots: true },
-    OPP_WARDS_KILLED: { dataKey: 'oppKilled', defaultName: 'Détruites (Adv)', color: '#f87171', strokeWidth: 2, isDashed: true, showDots: true },
-    PLAYER_SWEEPING: { dataKey: 'playerWardsKilled', defaultName: 'Nettoyage (Moi)', color: '#0ea5e9', strokeWidth: 2, showDots: true },
-    OPP_SWEEPING: { dataKey: 'oppWardsKilled', defaultName: 'Nettoyage (Adv)', color: '#ef4444', strokeWidth: 2, isDashed: true, showDots: true },
+    // Vision (On impose stepAfter pour des paliers stricts)
+    PLAYER_WARDS_PLACED: { dataKey: 'playerPlaced', defaultName: 'Posées (Moi)', color: '#0ea5e9', strokeWidth: 2, showDots: true, type: 'stepAfter' },
+    OPP_WARDS_PLACED: { dataKey: 'oppPlaced', defaultName: 'Posées (Adv)', color: '#ef4444', strokeWidth: 2, showDots: true, type: 'stepAfter' },
+    PLAYER_WARDS_KILLED: { dataKey: 'playerKilled', defaultName: 'Détruites (Moi)', color: '#38bdf8', strokeWidth: 2, isDashed: true, showDots: true, type: 'stepAfter' },
+    OPP_WARDS_KILLED: { dataKey: 'oppKilled', defaultName: 'Détruites (Adv)', color: '#f87171', strokeWidth: 2, isDashed: true, showDots: true, type: 'stepAfter' },
+    PLAYER_SWEEPING: { dataKey: 'playerWardsKilled', defaultName: 'Nettoyage (Moi)', color: '#0ea5e9', strokeWidth: 2, showDots: true, type: 'stepAfter' },
+    OPP_SWEEPING: { dataKey: 'oppWardsKilled', defaultName: 'Nettoyage (Adv)', color: '#ef4444', strokeWidth: 2, isDashed: true, showDots: true, type: 'stepAfter' },
     // Combat
     TREND_DAMAGE: { dataKey: 'trendDamage', defaultName: 'Tendance', color: '#666666', strokeWidth: 1, isDashed: true },
     TOTAL_DAMAGE: { dataKey: 'totalDamage', defaultName: 'Joueur', color: '#0ea5e9', strokeWidth: 3 }

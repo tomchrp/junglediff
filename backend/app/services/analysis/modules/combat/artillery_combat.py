@@ -6,35 +6,12 @@ PROJET  : JungleDiff
 """
 
 from typing import Dict, Any
-from app.services.analysis.modules.base_module import BaseMetricModule
+from app.services.analysis.base_analyzer import BaseRoleAnalyzer
 
-class ArtilleryCombatModule(BaseMetricModule):
+class ArtilleryCombatModule(BaseRoleAnalyzer):
 
-    def _process_damage_timeline(self, participant_id: int, timeline_data: Dict[str, Any]) -> list:
-        graph = []
-        if timeline_data and "info" in timeline_data:
-            frames = timeline_data["info"].get("frames", [])
-            for frame in frames:
-                ts = frame.get("timestamp", 0)
-                
-                # Récupération ultra-sécurisée des dégâts (évite les KeyError silencieuses)
-                participant_frames = frame.get("participantFrames", {})
-                p_frame = participant_frames.get(str(participant_id), {})
-                damage_stats = p_frame.get("damageStats", {})
-                dmg = damage_stats.get("totalDamageDoneToChampions", 0)
-                
-                # Récupération des achats
-                item_ids = []
-                for event in frame.get("events", []):
-                    if event.get("type") == "ITEM_PURCHASED" and event.get("participantId") == participant_id:
-                        item_ids.append(event.get("itemId"))
-                        
-                graph.append({
-                    "timestamp": ts,
-                    "totalDamage": dmg,
-                    "itemIds": item_ids
-                })
-        return graph
+    def analyze(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
+        pass
 
     def _calculate_spell_efficiency(self, participant: Dict[str, Any], challenges: Dict[str, Any]) -> Dict[str, Any]:
         spell1 = participant.get("spell1Casts", 0)
@@ -60,13 +37,13 @@ class ArtilleryCombatModule(BaseMetricModule):
     def compute(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
         c = participant.get("challenges", {})
         o_c = opponent.get("challenges", {}) if opponent else {}
-        participant_id = participant.get("participantId")
         
         spell_efficiency = self._calculate_spell_efficiency(participant, c)
         spell_efficiency_opp = self._calculate_spell_efficiency(opponent, o_c) if opponent else {}
         
-        # Extraction du graphique
-        damage_graph = self._process_damage_timeline(participant_id, timeline_data)
+        # FIX : Héritage du moteur de timeline parent pour filtrer les potions
+        extract_dmg_fn = lambda p: {"totalDamage": p.get("damageStats", {}).get("totalDamageDoneToChampions", 0)}
+        timeline_combat = self._extract_timeline_data(participant.get("participantId"), timeline_data, extract_dmg_fn)
         
         return {
             "damageToChampions": participant.get("totalDamageDealtToChampions", 0),
@@ -94,8 +71,5 @@ class ArtilleryCombatModule(BaseMetricModule):
             "longestTimeSpentLiving": c.get("longestTimeSpentLiving", 0),
             "longestTimeSpentLivingOpponent": o_c.get("longestTimeSpentLiving", 0) if opponent else 0,
             
-            # 4. Graphe de Combat (C'est cette clé que le front attend !)
-            "timelineGraph": {
-                "damage_graph": damage_graph
-            }
+            "timelineGraph": timeline_combat
         }

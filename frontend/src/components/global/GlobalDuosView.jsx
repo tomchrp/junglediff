@@ -2,15 +2,15 @@
  * ============================================================================
  * FICHIER : frontend/src/components/global/GlobalDuosView.jsx
  * ============================================================================
- * MODIFICATIONS :
- * - Suppression des `useState` locaux pour primaryLane et secondaryLane (utilisation des props).
- * - Suppression de la FilterBar redondante.
- * - Implémentation d'un Set de déduplication pour éviter l'inversion A/B en base.
+ * MODIFICATIONS (Phase 3) :
+ * - Remplacement de la structure Flexbox manuelle par SplitDataViewLayout.
+ * ============================================================================
  */
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import DuoList from './DuoList.jsx';
 import DuoBottomConsole from './DuoBottomConsole.jsx';
+import SplitDataViewLayout from '../layouts/SplitDataViewLayout.jsx';
 
 const GlobalDuosView = ({ primaryLane, secondaryLane, versionDDragon, championMap }) => {
     const [duosList, setDuosList] = useState([]);
@@ -27,19 +27,14 @@ const GlobalDuosView = ({ primaryLane, secondaryLane, versionDDragon, championMa
 
             try {
                 const response = await axios.get('http://localhost:8000/api/v1/global-duos/', {
-                    params: {
-                        primary_lane: primaryLane,
-                        secondary_lane: secondaryLane
-                    },
+                    params: { primary_lane: primaryLane, secondary_lane: secondaryLane },
                     signal: controller.signal
                 });
 
-                // CORRECTION : Déduplication stricte indépendante de l'ordre A/B
                 const uniqueDuos = [];
                 const seen = new Set();
 
                 for (const duo of response.data) {
-                    // Crée une clé unique ordonnée (ex: "64-157" sera identique à "157-64")
                     const key = [duo.champ_a, duo.champ_b].sort().join('-');
                     if (!seen.has(key)) {
                         seen.add(key);
@@ -47,7 +42,6 @@ const GlobalDuosView = ({ primaryLane, secondaryLane, versionDDragon, championMa
                     }
                 }
 
-                // Tri final
                 const sortedData = uniqueDuos.sort((a, b) => b.duo_wr - a.duo_wr);
                 setDuosList(sortedData);
 
@@ -72,49 +66,54 @@ const GlobalDuosView = ({ primaryLane, secondaryLane, versionDDragon, championMa
         return () => controller.abort();
     }, [primaryLane, secondaryLane]);
 
-    return (
-        <div className="flex-1 flex flex-col relative overflow-hidden gap-4 min-h-0">
-
-            {/* Conteneur de la liste */}
-            <div className={`glass-panel flex flex-col min-h-0 transition-all duration-300 ${selectedDuo ? 'basis-1/2 shrink-0' : 'basis-full'}`}>
-                <div className="shrink-0 flex items-center justify-between border-b border-border-glass px-4 py-3">
-                    <h2 className="text-lol-gold font-bold uppercase tracking-widest text-sm">
-                        Classement des synergies
-                    </h2>
-                    <span className="text-xs text-lol-textMuted">{duosList.length} combinaisons uniques</span>
-                </div>
-
-                {isLoading && duosList.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center">
-                        <span className="animate-pulse text-lol-gold font-bold uppercase tracking-widest text-sm">
-                            Extraction depuis le Data Lake...
-                        </span>
-                    </div>
-                ) : error ? (
-                    <div className="p-6 text-lol-loss text-sm">{error}</div>
-                ) : (
-                    <DuoList
-                        data={duosList}
-                        activeDuo={selectedDuo}
-                        onSelect={setSelectedDuo}
-                        versionDDragon={versionDDragon}
-                        championMap={championMap}
-                        primaryLane={primaryLane} // Transmission pour l'ancrage visuel
-                    />
-                )}
+    const masterContent = (
+        <>
+            <div className="shrink-0 flex items-center justify-between border-b border-border-glass px-4 py-3">
+                <h2 className="text-lol-gold font-bold uppercase tracking-widest text-sm">
+                    Classement des synergies
+                </h2>
+                <span className="text-xs text-lol-textMuted">{duosList.length} combinaisons uniques</span>
             </div>
 
-            {/* Console */}
-            {selectedDuo && (
-                <DuoBottomConsole
-                    duo={selectedDuo}
-                    onClose={() => setSelectedDuo(null)}
+            {isLoading && duosList.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center">
+                    <span className="animate-pulse text-lol-gold font-bold uppercase tracking-widest text-sm">
+                        Extraction depuis le Data Lake...
+                    </span>
+                </div>
+            ) : error ? (
+                <div className="p-6 text-lol-loss text-sm">{error}</div>
+            ) : (
+                <DuoList
+                    data={duosList}
+                    activeDuo={selectedDuo}
+                    onSelect={setSelectedDuo}
                     versionDDragon={versionDDragon}
                     championMap={championMap}
-                    primaryLane={primaryLane} // Transmission pour l'ancrage visuel
+                    primaryLane={primaryLane}
                 />
             )}
-        </div>
+        </>
+    );
+
+    const detailContent = selectedDuo ? (
+        <DuoBottomConsole
+            duo={selectedDuo}
+            onClose={() => setSelectedDuo(null)}
+            versionDDragon={versionDDragon}
+            championMap={championMap}
+            primaryLane={primaryLane}
+        />
+    ) : null;
+
+    return (
+        <SplitDataViewLayout
+            masterContent={masterContent}
+            masterContainerClassName="glass-panel"
+            detailContent={detailContent}
+            isDetailOpen={!!selectedDuo}
+            detailContainerClassName="glass-panel p-4"
+        />
     );
 };
 

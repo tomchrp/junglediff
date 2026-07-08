@@ -2,11 +2,6 @@
 ===============================================================================
 FICHIER : backend/app/services/analysis/modules/vision/support_vision.py
 PROJET  : JungleDiff
-
-DESCRIPTION :
-Module expert gérant l'extraction des statistiques de vision pour le rôle 
-Support. Calcule la part d'équipe, la couverture et parse la timeline pour 
-retracer la quête d'objet de vision et le setup d'objectifs neutres.
 ===============================================================================
 """
 
@@ -16,11 +11,6 @@ from app.services.analysis.modules.base_module import BaseMetricModule
 class SupportVisionModule(BaseMetricModule):
     
     def _process_vision_timeline(self, participant_id: int, opp_id: int, timeline_data: Dict[str, Any], game_duration: int) -> Dict[str, Any]:
-        """
-        Parcourt l'intégralité des frames temporelles pour tracer l'évolution 
-        des balises posées et détruites. Calcule également le timer d'obtention 
-        de la quête d'objet Support et la préparation de vision autour des monstres épiques.
-        """
         events = []
         if timeline_data and "info" in timeline_data:
             for frame in timeline_data["info"].get("frames", []):
@@ -83,6 +73,10 @@ class SupportVisionModule(BaseMetricModule):
                     "oppKilled": o_killed
                 })
 
+        # Sécurisation : certaines vieilles parties renvoient des millisecondes
+        if game_duration > 10000:
+            game_duration = game_duration // 1000
+
         final_ts = game_duration * 1000
         vision_events.append({
             "timestamp": final_ts,
@@ -102,10 +96,6 @@ class SupportVisionModule(BaseMetricModule):
         }
 
     def compute(self, participant: Dict[str, Any], match_data: Dict[str, Any], timeline_data: Dict[str, Any] = None, opponent: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Assemble les statistiques de vision brutes et temporelles pour former 
-        le dictionnaire exact attendu par l'onglet Vision du frontend.
-        """
         c = participant.get("challenges", {})
         o_c = opponent.get("challenges", {}) if opponent else {}
         

@@ -38,7 +38,7 @@ const MatchCardSummary = ({ team100, team200, playerPuuid, versionDDragon, champ
     const team200Kills = team200.reduce((acc, p) => acc + p.kills, 0);
     const maxDmg100 = Math.max(...team100.map(p => p.totalDamageDealtToChampions), 1);
     const maxDmg200 = Math.max(...team200.map(p => p.totalDamageDealtToChampions), 1);
-    
+
     const durationMin = gameDuration / 60;
 
     /**
@@ -54,7 +54,7 @@ const MatchCardSummary = ({ team100, team200, playerPuuid, versionDDragon, champ
     const renderParticipantRow = (p, teamKills, maxTeamDmg, teamColorClass) => {
         const isTargetUser = p.puuid === playerPuuid;
         const imageChampName = championMap[p.championId] || "Inconnu";
-        
+
         // Métriques dérivées
         const kp = teamKills > 0 ? Math.round(((p.kills + p.assists) / teamKills) * 100) : 0;
         const dmgPct = Math.round((p.totalDamageDealtToChampions / maxTeamDmg) * 100);
@@ -67,24 +67,24 @@ const MatchCardSummary = ({ team100, team200, playerPuuid, versionDDragon, champ
         const keystonePath = KEYSTONE_PATHS[keystoneId] || RUNE_PATHS[p.perks?.primaryStyle] || "7200_Domination";
 
         // Mise en surbrillance stricte respectant le Design System pour le joueur cible
-        const rowStyle = isTargetUser 
-            ? "bg-surface-elevated border-lol-gold shadow-glow-gold z-10" 
+        const rowStyle = isTargetUser
+            ? "bg-surface-elevated border-lol-gold shadow-glow-gold z-10"
             : "border-transparent hover:bg-surface-elevated";
 
         return (
             <div key={p.puuid} className={`flex items-center justify-between px-2 py-1.5 rounded-md border transition-colors ${rowStyle}`}>
-                
+
                 {/* 1. Bloc Identité (Champion + Pseudo) */}
                 <div
                     className="flex items-center gap-2 w-[110px] shrink-0 cursor-pointer group"
                     onClick={(e) => { e.stopPropagation(); onPlayerSearch(currentServer, p.riotIdGameName, p.riotIdTagline); }}
                 >
-                    <Avatar 
-                        type="champion" 
-                        size="sm" 
-                        src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${imageChampName}.png`} 
-                        alt={imageChampName} 
-                        isSelected={isTargetUser} 
+                    <Avatar
+                        type="champion"
+                        size="sm"
+                        src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${imageChampName}.png`}
+                        alt={imageChampName}
+                        isSelected={isTargetUser}
                     />
                     <span className={`text-[11px] truncate transition-colors group-hover:underline ${isTargetUser ? 'text-lol-gold font-bold' : 'text-lol-textMuted group-hover:text-gray-100'}`}>
                         {p.riotIdGameName}
@@ -100,13 +100,13 @@ const MatchCardSummary = ({ team100, team200, playerPuuid, versionDDragon, champ
                     <div className="text-[10px] font-medium text-lol-textMuted mt-0.5">{kp}% KP</div>
                 </div>
 
-                
 
-                
+
+
 
                 {/* 5. Bloc Équipement complet (Sorts, Runes, Objets) */}
                 <div className="flex items-center gap-2 shrink-0">
-                    
+
                     <div className="flex gap-1">
                         <div className="flex flex-col gap-[2px]">
                             <Avatar type="spell" size="xs" src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/spell/${SUMMONER_SPELLS[p.summoner1Id] || "SummonerFlash"}.png`} />
@@ -117,7 +117,7 @@ const MatchCardSummary = ({ team100, team200, playerPuuid, versionDDragon, champ
                             <Avatar type="rune" size="xs" src={`https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/${RUNE_PATHS[p.perks?.subStyle] || "7201_Precision"}.png`} className="opacity-70" />
                         </div>
                     </div>
-                    
+
                     <div className="flex gap-[2px]">
                         {[p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6].map((itemId, idx) => (
                             itemId > 0 ? (
