@@ -7,32 +7,45 @@
  * Primitive visuelle (Design System) affichant la minimap de la Faille de l'Invocateur.
  * Ce composant trace les routes de jungle (First Clear) en utilisant les 
  * coordonnées spatiales extraites par le backend.
- * * FONCTIONNALITÉS :
- * - Accepte un objet unique (une partie) ou un tableau (plusieurs parties).
- * - Bascule (Toggle) intégrée pour filtrer les routes par équipe (Blue/Red side).
- * - Utilisation d'un calque SVG en position absolue garantissant que les lignes
- * pointillées restent parfaitement attachées aux marqueurs peu importe 
- * l'étirement ou la résolution de l'écran.
+ * * MODIFICATIONS :
+ * - Suppression totale de l'état interne : Le composant devient "Dumb" et obéit 
+ * exclusivement à la prop `activeTeam` fournie par App.jsx.
+ * - Refonte de l'extracteur de frames : Une fonction `getValidPoints` extrait 
+ * désormais dynamiquement toutes les frames valides, empêchant le plantage
+ * silencieux si le backend renvoie un JSON incomplet.
  * ============================================================================
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 
 // Constante officielle de la taille de la Faille de l'Invocateur (Match V5)
 const MAP_MAX = 14820;
 
-const JunglePathingMap = ({ data }) => {
+/**
+ * Extrait dynamiquement les frames de coordonnées valides d'un chemin, 
+ * peu importe leur nombre ou leur nom exact (f1, f2, etc.).
+ * @param {Object} path - L'objet contenant les points de cheminement.
+ * @returns {Array} Un tableau de coordonnées {x, y} valides.
+ */
+const getValidPoints = (path) => {
+    const points = [];
+    // On itère sur un nombre suffisant de frames potentielles
+    for (let i = 1; i <= 10; i++) {
+        const frame = path[`f${i}`];
+        if (frame && frame.x != null && frame.y != null) {
+            points.push(frame);
+        }
+    }
+    return points;
+};
+
+const JunglePathingMap = ({ data, activeTeam }) => {
     // Normalisation : garantit que l'on manipule toujours un tableau, 
     // même si le backend n'envoie qu'un seul objet pour une partie unique.
     const rawPaths = useMemo(() => {
         if (!data) return [];
         return Array.isArray(data) ? data : [data];
     }, [data]);
-
-    // Déduction de l'équipe majoritaire pour l'état initial du Toggle
-    // Si la donnée provient d'un match unique, on pré-sélectionne le camp du joueur.
-    const defaultTeam = rawPaths.length > 0 ? rawPaths[0].teamId : 100;
-    const [activeTeam, setActiveTeam] = useState(defaultTeam);
 
     // Filtrage des chemins selon le Toggle actif (100 = Blue, 200 = Red)
     const filteredPaths = useMemo(() => {
@@ -65,28 +78,6 @@ const JunglePathingMap = ({ data }) => {
 
     return (
         <div className="w-full flex flex-col gap-4">
-            {/* Contrôles (Toggle) */}
-            <div className="flex justify-center gap-2">
-                <button
-                    onClick={() => setActiveTeam(100)}
-                    className={`px-4 py-2 text-sm font-bold rounded-md transition-colors ${activeTeam === 100
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-surface-solid text-gray-400 hover:text-gray-200'
-                        }`}
-                >
-                    Équipe Bleue
-                </button>
-                <button
-                    onClick={() => setActiveTeam(200)}
-                    className={`px-4 py-2 text-sm font-bold rounded-md transition-colors ${activeTeam === 200
-                            ? 'bg-red-600 text-white'
-                            : 'bg-surface-solid text-gray-400 hover:text-gray-200'
-                        }`}
-                >
-                    Équipe Rouge
-                </button>
-            </div>
-
             {/* Conteneur Minimap (Aspect Carré Strict) */}
             <div className="relative w-full max-w-md mx-auto aspect-square bg-black rounded-lg overflow-hidden border border-white/10 shadow-lg">
                 {/* Image de fond */}
@@ -99,46 +90,38 @@ const JunglePathingMap = ({ data }) => {
                 {/* Couche Vectorielle (Lignes pointillées) */}
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
                     {filteredPaths.map((path, idx) => {
-                        // Sécurité : ne pas dessiner si les points sont manquants
-                        if (!path.f1?.x || !path.f2?.x || !path.f3?.x) return null;
-
-                        const x1 = toPercentX(path.f1.x);
-                        const y1 = toPercentY(path.f1.y);
-                        const x2 = toPercentX(path.f2.x);
-                        const y2 = toPercentY(path.f2.y);
-                        const x3 = toPercentX(path.f3.x);
-                        const y3 = toPercentY(path.f3.y);
+                        const points = getValidPoints(path);
+                        // On a besoin d'au moins 2 points pour tracer une ligne
+                        if (points.length < 2) return null;
 
                         const strokeColor = isBlueSide ? '#3b82f6' : '#ef4444'; // blue-500 ou red-500
+                        const lines = [];
 
-                        return (
-                            <g key={`lines-${idx}`}>
+                        for (let i = 0; i < points.length - 1; i++) {
+                            const p1 = points[i];
+                            const p2 = points[i + 1];
+                            lines.push(
                                 <line
-                                    x1={`${x1}%`} y1={`${y1}%`}
-                                    x2={`${x2}%`} y2={`${y2}%`}
+                                    key={`line-${idx}-${i}`}
+                                    x1={`${toPercentX(p1.x)}%`} y1={`${toPercentY(p1.y)}%`}
+                                    x2={`${toPercentX(p2.x)}%`} y2={`${toPercentY(p2.y)}%`}
                                     stroke={strokeColor}
                                     strokeWidth="2"
                                     strokeDasharray="4 4"
                                     opacity="0.8"
                                 />
-                                <line
-                                    x1={`${x2}%`} y1={`${y2}%`}
-                                    x2={`${x3}%`} y2={`${y3}%`}
-                                    stroke={strokeColor}
-                                    strokeWidth="2"
-                                    strokeDasharray="4 4"
-                                    opacity="0.8"
-                                />
-                            </g>
-                        );
+                            );
+                        }
+
+                        return <g key={`lines-${idx}`}>{lines}</g>;
                     })}
                 </svg>
 
                 {/* Couche HTML (Badges temporels) */}
                 {filteredPaths.map((path, idx) => {
-                    if (!path.f1?.x || !path.f2?.x || !path.f3?.x) return null;
+                    const points = getValidPoints(path);
+                    if (points.length === 0) return null;
 
-                    const points = [path.f1, path.f2, path.f3];
                     const colorClass = isBlueSide ? 'bg-blue-600' : 'bg-red-600';
 
                     return points.map((pt, ptIdx) => (

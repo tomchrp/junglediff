@@ -5,12 +5,10 @@
  *
  * DESCRIPTION :
  * Barre transversale de filtrage centralisée pour l'application.
- * * * MODIFICATIONS (Phase 4 - Meta Duos) :
- * - Intégration du mode `isMetaDuosMode`.
- * - Transforme le composant pour gérer 3 états distincts : 
- * 1. Historique (Lane + Patch)
- * 2. Synergies (Lane + Contexte Temporel Carrière/Récent)
- * 3. Meta Duos (Lane d'ancrage + Lane de croisement)
+ * * MODIFICATIONS :
+ * - Intégration du mode `isPremierClearMode` : Si activé, la barre occulte 
+ * totalement la liste des lanes et le patch pour afficher les bascules 
+ * d'équipes (Bleu / Rouge) liées à la carte vectorielle.
  * ============================================================================
  */
 import React, { useState, useEffect } from 'react';
@@ -47,17 +45,21 @@ const FilterBar = ({
     primaryLane,
     secondaryLane,
     onPrimaryChange,
-    onSecondaryChange
+    onSecondaryChange,
+
+    // Props optionnelles (Vue Premier Clear)
+    isPremierClearMode,
+    activeTeam,
+    onTeamChange
 }) => {
     const [availablePatches, setAvailablePatches] = useState([]);
 
     // Déduction sémantique des modes pour la lisibilité
     const isSynergiesMode = typeof onTimeFilterChange === 'function' && !isMetaDuosMode;
-    const isHistoryMode = !isSynergiesMode && !isMetaDuosMode;
 
     useEffect(() => {
-        // En mode Meta globale, on ne requiert pas l'API joueur pour les patchs
-        if (!puuid || isMetaDuosMode) {
+        // En mode Meta globale ou Premier Clear, on ne requiert pas l'API joueur pour les patchs
+        if (!puuid || isMetaDuosMode || isPremierClearMode) {
             setAvailablePatches([]);
             return;
         }
@@ -72,7 +74,7 @@ const FilterBar = ({
         };
 
         fetchPatches();
-    }, [puuid, refreshTrigger, isMetaDuosMode]);
+    }, [puuid, refreshTrigger, isMetaDuosMode, isPremierClearMode]);
 
     // ==========================================
     // LOGIQUE : HISTORIQUE & SYNERGIES
@@ -120,6 +122,33 @@ const FilterBar = ({
     ];
 
     // ==========================================
+    // RENDU : MODE PREMIER CLEAR (Toggle Équipe)
+    // ==========================================
+    if (isPremierClearMode) {
+        return (
+            <div className="glass-panel p-4 flex gap-4 items-center z-40 relative border-b border-border-glass justify-center">
+                <span className="text-lol-textMuted text-xs font-bold uppercase tracking-wider mr-4">
+                    Côté de la carte :
+                </span>
+                <div className="flex bg-surface-elevated rounded-md p-1 border border-border-glass shadow-inner">
+                    <button
+                        onClick={() => onTeamChange(100)}
+                        className={`px-6 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${activeTeam === 100 ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200'}`}
+                    >
+                        Équipe Bleue
+                    </button>
+                    <button
+                        onClick={() => onTeamChange(200)}
+                        className={`px-6 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${activeTeam === 200 ? 'bg-red-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200'}`}
+                    >
+                        Équipe Rouge
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
     // RENDU : MODE META DUOS (Double ligne)
     // ==========================================
     if (isMetaDuosMode) {
@@ -159,8 +188,8 @@ const FilterBar = ({
                         <button
                             onClick={() => onSecondaryChange('ALL')}
                             className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors border ${secondaryLane === 'ALL'
-                                    ? 'bg-surface-elevated text-lol-gold border-lol-gold/50'
-                                    : 'border-transparent text-gray-500 hover:text-gray-300'
+                                ? 'bg-surface-elevated text-lol-gold border-lol-gold/50'
+                                : 'border-transparent text-gray-500 hover:text-gray-300'
                                 }`}
                         >
                             Toutes Lanes

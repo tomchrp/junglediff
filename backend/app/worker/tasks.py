@@ -12,6 +12,12 @@ MODIFICATIONS :
 - Implémentation d'un bouclier anti-boucle pour les modes de jeu ignorés.
   Désormais, les matchs hors-critères (ARAM, URF) sont enregistrés de façon
   minimale en base pour servir de filtre anti-doublon permanent.
+- CORRECTION CRITIQUE (Topographie Match-V5) : Suppression de la clé d'insertion
+  obsolète `position` dans le dictionnaire des participants pour s'aligner sur 
+  le modèle de base de données unifié.
+- CORRECTION SPATIALE : Mapping exhaustif des coordonnées de pathing (pos_f1_x à 
+  pos_f3_y) issues du trimmer vers les requêtes d'insertion et de mise à jour 
+  SQL pour hydrater la vue Premier Clear.
 ===============================================================================
 """
 
@@ -48,7 +54,6 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
         
         # 2. Sécurité et filtrage des modes de jeu (Late Filtering)
         if queue_id not in [420, 440, 400, 490]:
-            # BINDAGE CRITIQUE : Enregistrement minimal pour bloquer les futures requêtes Riot sur cet ID
             async with AsyncSessionLocal() as session:
                 stmt_ignored = insert(Match).values(
                     match_id=match_id,
@@ -135,17 +140,21 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
                     "team_id": p.get("teamId", 0),
                     "champion_id": p.get("championId", 0),
                     "lane": p.get("teamPosition", "NONE"),
-                    "position": p.get("teamPosition", "NONE"),
                     "win": p.get("win", False),
                     "kills": p.get("kills", 0),
                     "deaths": p.get("deaths", 0),
                     "assists": p.get("assists", 0),
                     "gold_diff_15m": p_metrics.get("gold_diff_15m"),
                     "xp_diff_15m": p_metrics.get("xp_diff_15m"),
-                    "is_snowballing": p_metrics.get("is_snowballing")
+                    "is_snowballing": p_metrics.get("is_snowballing"),
+                    "pos_f1_x": p_metrics.get("pos_f1_x"),
+                    "pos_f1_y": p_metrics.get("pos_f1_y"),
+                    "pos_f2_x": p_metrics.get("pos_f2_x"),
+                    "pos_f2_y": p_metrics.get("pos_f2_y"),
+                    "pos_f3_x": p_metrics.get("pos_f3_x"),
+                    "pos_f3_y": p_metrics.get("pos_f3_y")
                 }
 
-            # Application stricte du tri alphabétique pour la prévention des deadlocks
             players_data = [players_dict[k] for k in sorted(players_dict.keys())]
             participants_data = [participants_dict[k] for k in sorted(participants_dict.keys())]
 
@@ -171,7 +180,13 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
                         assists=stmt_participants.excluded.assists,
                         gold_diff_15m=stmt_participants.excluded.gold_diff_15m,
                         xp_diff_15m=stmt_participants.excluded.xp_diff_15m,
-                        is_snowballing=stmt_participants.excluded.is_snowballing
+                        is_snowballing=stmt_participants.excluded.is_snowballing,
+                        pos_f1_x=stmt_participants.excluded.pos_f1_x,
+                        pos_f1_y=stmt_participants.excluded.pos_f1_y,
+                        pos_f2_x=stmt_participants.excluded.pos_f2_x,
+                        pos_f2_y=stmt_participants.excluded.pos_f2_y,
+                        pos_f3_x=stmt_participants.excluded.pos_f3_x,
+                        pos_f3_y=stmt_participants.excluded.pos_f3_y
                     )
                 )
                 await session.execute(stmt_participants)
@@ -229,15 +244,29 @@ async def process_timeline_only(ctx, match_id: str, continent: str):
             
             if metrics_dict:
                 for puuid, m in metrics_dict.items():
+                    # Base de mise à jour (Économie)
+                    update_values = {
+                        "gold_diff_15m": m.get("gold_diff_15m"),
+                        "xp_diff_15m": m.get("xp_diff_15m"),
+                        "is_snowballing": m.get("is_snowballing")
+                    }
+                    
+                    # Ajout des données spatiales conditionné exactement comme le Backfill
+                    if m.get("pos_f1_x") is not None:
+                        update_values.update({
+                            "pos_f1_x": m.get("pos_f1_x"),
+                            "pos_f1_y": m.get("pos_f1_y"),
+                            "pos_f2_x": m.get("pos_f2_x"),
+                            "pos_f2_y": m.get("pos_f2_y"),
+                            "pos_f3_x": m.get("pos_f3_x"),
+                            "pos_f3_y": m.get("pos_f3_y")
+                        })
+                        
                     await session.execute(
                         update(MatchParticipant)
                         .where(MatchParticipant.match_id == match_id)
                         .where(MatchParticipant.puuid == puuid)
-                        .values(
-                            gold_diff_15m=m.get("gold_diff_15m"),
-                            xp_diff_15m=m.get("xp_diff_15m"),
-                            is_snowballing=m.get("is_snowballing")
-                        )
+                        .values(**update_values)
                     )
             await session.commit()
         return {"status": "success", "match_id": match_id}

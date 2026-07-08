@@ -436,3 +436,23 @@ Le backend relationnel extrait les affrontements de manière brute depuis les vu
 La topologie visuelle réutilise les concepts de Layout étirable éprouvés par la vue Synergies[cite: 6].
 * **Flexbox Fluide :** L'interface abandonne les superpositions en position absolue au profit d'un partage d'espace strict (`basis-1/2`). Lors de l'ouverture de la console temporelle d'analyse de *Power Spikes*, la liste virtuelle s'écrase proprement vers le haut sans masquer la moindre donnée, préservant les coins arrondis et le Glassmorphism du Design System.
 * **Filtres Hybrides Segmentés :** La `FilterBar` globale a été refactorisée pour agir selon un pattern conditionnel. En mode "Meta Duos", elle abandonne le sélecteur temporel pour exposer deux rangées distinctes (Rôle Primaire et Secondaire). Cette ségrégation visuelle prévient les conflits d'états illogiques (ex: bloquer la sélection de deux rôles identiques) via des règles d'exclusion appliquées avant même la requête API.
+
+## 18. Lifting State Up, Topographie Spatiale et Contrat de Données (Août 2026)
+
+L'implémentation de la vue "Premier Clear" (Pathing Jungle) a nécessité une fiabilisation de bout en bout du cycle de vie de la donnée, du worker d'ingestion jusqu'à l'état des composants React.
+
+### 18.1. Sanctuarisation du Contrat de Données (Source of Truth)
+Une désynchronisation critique a été identifiée entre les filtres du frontend et les requêtes SQL (ex: la disparition des statistiques de la Sidebar lors de la sélection du rôle Support).
+* **Abolition des traductions intermédiaires :** Le backend s'interdit désormais toute traduction sémantique sauvage (`UTILITY` vers `SUPPORT`). La donnée est traitée, stockée et requêtée avec la nomenclature stricte de Riot Games (`UTILITY`). 
+* **Ségrégation métier :** La seule traduction tolérée s'effectue aux frontières absolues du domaine métier, spécifiquement lors de l'instanciation des classes d'Analyse IA (ex: mapping vers `SupportAgency`).
+
+### 18.2. Extraction Spatiale Automatisée (Workers ARQ)
+La mécanique d'extraction des données spatiales (coordonnées du joueur aux minutes 1, 2 et 3) a été intégrée au cœur du processus d'ingestion.
+* **Hydratation à la volée :** Le dictionnaire de métriques du `DataTrimmer` est désormais intégralement mappé par le worker (`tasks.py`) lors de l'Update SQL de la table `MatchParticipant` (`pos_f1_x`, `pos_f2_y`, etc.).
+* **Élimination du Backfill :** Qu'une timeline soit téléchargée en masse par le Crawler en arrière-plan ou via un rattrapage manuel ciblé (clic sur une MatchCard), les coordonnées spatiales sont immédiatement persistées, rendant la vue "Premier Clear" instantanément opérationnelle sans script de maintenance.
+
+### 18.3. "Lifting State Up" et Composants Visuels Purs (Dumb Components)
+Pour garantir la cohérence d'une vue, l'état ne doit pas être enfermé dans des composants enfants isolés.
+* **Remontée d'état (App.jsx) :** La sélection de l'équipe (Bleue ou Rouge) pour l'analyse du pathing a été extraite de la carte pour être remontée dans l'orchestrateur principal (`App.jsx`), rejoignant le filtre de champion sélectionné (`selectedChampion`).
+* **Composant Vectoriel Stupide :** `JunglePathingMap.jsx` a été purgé de son état interne (`useState`). Il est devenu une primitive purement visuelle (Dumb Component) qui se contente de tracer des vecteurs SVG dynamiques (tolérants aux frames manquantes, comme les AFK) en fonction des "props" qui lui sont descendues.
+* **Mutation de la FilterBar :** La barre de filtre transversale gère désormais des modes conditionnels exclusifs (`isPremierClearMode`). Lorsqu'activée, elle occulte la liste des rôles (verrouillée sur "Jungle" par l'orchestrateur) pour afficher les contrôles d'équipe, préservant ainsi l'ergonomie globale.

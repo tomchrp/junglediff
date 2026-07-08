@@ -6,15 +6,13 @@ PROJET  : JungleDiff
 DESCRIPTION :
 Routeur gérant les interactions liées aux joueurs. Expose la route d'ingestion 
 (update), les routes de lecture (summary, champion-stats), ainsi que la route 
-de polling (sync-status) qui a été modifiée pour renvoyer le nombre de parties 
-ingérées en temps réel.
-Intègre le mécanisme "Offline-First" absolu pour permettre l'utilisation
-de l'application même lorsque l'API Riot est bloquée par le crawler.
+de polling (sync-status).
 
 MODIFICATIONS :
-- Correction d'attributs SQLAlchemy (AttributeError) : Remplacement exclusif de 
-  l'ancien attribut obsolète `position` par `lane` suite à la déduplication de 
-  la base de données (Topographie Match-V5).
+- NORMALISATION : Suppression de la traduction forcée UTILITY -> SUPPORT dans 
+  la route get_champion_stats. Le backend requiert désormais la base de données 
+  avec le terme exact de Riot Games (UTILITY), rétablissant ainsi le bon 
+  fonctionnement de la Sidebar.
 ===============================================================================
 """
 
@@ -30,7 +28,7 @@ from app.db.session import get_db
 from app.services.sync_service import SyncService
 from app.services.riot_client import RateLimitExceeded
 from app.db.repositories import PlayerRepository
-from app.db.models import Player, MatchParticipant, Match, MatchParticipant
+from app.db.models import Player, MatchParticipant, Match
 
 router = APIRouter()
 
@@ -43,13 +41,10 @@ class PlayerSyncRequest(BaseModel):
 async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = Depends(get_db)):
     """
     Point d'entrée principal pour la synchronisation du profil joueur.
-    Implémente une vérification locale ultra-robuste (nettoyage des espaces et 
-    de la casse via le moteur SQL) avant de tenter l'appel Riot. Si le client Riot 
-    lève une exception de Rate Limit, la fonction court-circuite l'erreur et renvoie
-    le PUUID local pour permettre au frontend de s'afficher instantanément.
+    Implémente une vérification locale robuste avant de tenter l'appel Riot. 
+    Si le client Riot lève une exception de Rate Limit, la fonction bascule 
+    en mode Offline-First.
     """
-    # 1. Vérification Locale Ultra-Robuste (Mode Offline-First)
-    # Suppression des espaces et forçage en minuscules pour contrer les anomalies Riot
     clean_db_name = func.replace(func.lower(Player.riot_id_name), ' ', '')
     clean_req_name = request.game_name.lower().replace(' ', '')
     
@@ -58,14 +53,12 @@ async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = D
         func.lower(Player.riot_id_tagline) == func.lower(request.tag_line)
     )
     
-    # Utilisation de scalars().first() pour prévenir un crash 500 en cas de doublon en base
     local_player_result = await db.execute(query)
     local_player = local_player_result.scalars().first()
     
     service = SyncService(db)
     
     try:
-        # 2. Tentative de synchronisation en temps réel avec l'API Riot
         result = await service.sync_player_profile(request.server, request.game_name, request.tag_line)
         
         if result and "error" in result:
@@ -76,7 +69,6 @@ async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = D
         return result
         
     except RateLimitExceeded as e:
-        # 3. LE BOUCLIER OFFLINE
         if local_player:
             return {
                 "status": "offline_fallback", 
@@ -84,7 +76,6 @@ async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = D
                 "warning": "Mode hors-ligne: Le Crawler monopolise l'API."
             }
             
-        # Si le joueur n'existe pas en base et que l'API est bloquée, le refus est inévitable
         raise HTTPException(
             status_code=429, 
             detail=f"Le Crawler analyse actuellement un volume massif de données. Veuillez réessayer dans {e.ttl} secondes."
@@ -94,8 +85,8 @@ async def update_player_profile(request: PlayerSyncRequest, db: AsyncSession = D
 async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
     """
     Renvoie les informations globales du joueur pour la PlayerStatCard.
-    Intègre le calcul dynamique de la voie préférée (preferredLane) basée
-    sur l'échantillon des 60 dernières parties jouées.
+    Intègre le calcul dynamique de la voie préférée basée sur l'échantillon 
+    des dernières parties jouées.
     """
     repo = PlayerRepository(db)
     player = await repo.get_player_by_puuid(puuid)
@@ -103,10 +94,6 @@ async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
     if not player:
         raise HTTPException(status_code=404, detail="Joueur introuvable en base de données.")
         
-    # --- CALCUL DE LA PREFERRED LANE ---
-    
-    # 1. Sous-requête : Restreindre l'échantillon aux 60 dernières parties du joueur
-    # (Correspond au volume de l'ingestion initiale : 20 Solo, 20 Flex, 20 Normal)
     recent_matches_subq = (
         select(MatchParticipant.lane)
         .join(Match, MatchParticipant.match_id == Match.match_id)
@@ -116,10 +103,8 @@ async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
         .subquery()
     )
 
-    # 2. Requête principale : Grouper, compter et récupérer la position dominante
     pref_lane_query = (
         select(recent_matches_subq.c.lane)
-        # On exclut les positions invalides que l'API Riot renvoie parfois (ex: ARAM, Arena)
         .where(recent_matches_subq.c.lane.notin_(["", "INVALID"]))
         .group_by(recent_matches_subq.c.lane)
         .order_by(func.count().desc())
@@ -129,9 +114,6 @@ async def get_player_summary(puuid: str, db: AsyncSession = Depends(get_db)):
     result_lane = await db.execute(pref_lane_query)
     preferred_lane = result_lane.scalar_one_or_none()
 
-    # 3. Fallback de sécurité (Race Condition)
-    # Si le frontend appelle cette route alors que les workers ARQ n'ont pas encore 
-    # inséré la moindre partie en base, on force une valeur par défaut.
     if not preferred_lane:
         preferred_lane = "JUNGLE"
         
@@ -157,7 +139,8 @@ async def get_champion_stats(
 ):
     """
     Renvoie les statistiques agrégées des champions pour l'affichage de la Sidebar.
-    Prend en compte les potentiels paramètres optionnels de filtre de lane ou de patch.
+    Transmet le rôle brut (ex: UTILITY) au repository pour garantir la correspondance
+    avec la donnée stockée.
     """
     repo = PlayerRepository(db)
     stats = await repo.get_champion_stats_sidebar(puuid, lane, patch)
@@ -166,9 +149,7 @@ async def get_champion_stats(
 @router.get("/{puuid}/sync-status")
 async def get_sync_status(puuid: str, db: AsyncSession = Depends(get_db)):
     """
-    Détermine l'état de synchronisation d'un joueur en base de données de façon 
-    progressive. Compare le délai depuis la dernière mise à jour globale et le 
-    volume de parties ingérées pour indiquer au frontend de libérer l'interface.
+    Détermine l'état de synchronisation d'un joueur en base de données.
     """
     query_player = select(Player).where(Player.puuid == puuid)
     result_player = await db.execute(query_player)
@@ -200,26 +181,22 @@ async def get_player_analytics(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Endpoint analytique dédié au croisement de données massives. Effectue une 
-    auto-jointure complète sur la table MatchParticipant pour calculer le taux 
-    de victoire d'un joueur (mp1) en fonction de la présence avérée d'un allié 
-    ou d'un adversaire spécifique (mp2).
+    Endpoint analytique dédié au croisement de données massives (Synergies/Matchups).
+    Effectue une auto-jointure sur la table MatchParticipant pour calculer 
+    l'impact croisé des joueurs.
     """
     mp1 = aliased(MatchParticipant)
     mp2 = aliased(MatchParticipant)
     match_table = aliased(Match)
 
-    # 1. Conditions strictes identifiant le joueur et son rôle
     conditions = [
         mp1.puuid == puuid,
         mp1.lane == lane
     ]
     
-    # 2. Ajout dynamique du filtre de champion si sélectionné
     if champion_id:
         conditions.append(mp1.champion_id == champion_id)
 
-    # 3. Requête d'agrégation : On compte les apparitions de mp2 et les victoires de mp1
     q = select(
         mp2.lane,
         mp2.champion_id,
@@ -229,18 +206,16 @@ async def get_player_analytics(
         mp2, mp1.match_id == mp2.match_id
     )
 
-    # 4. Jointure optionnelle sur la table Match pour filtrer par Patch
     if patch != "ALL":
         q = q.join(match_table, mp1.match_id == match_table.match_id)
         q = q.where(match_table.game_version.startswith(patch))
 
-    # 5. Application des règles métier : Alliés (Synergies) vs Adversaires (Matchups)
     if type == "SYNERGIES":
         q = q.where(and_(
             mp1.team_id == mp2.team_id,
-            mp1.puuid != mp2.puuid # On exclut le joueur lui-même
+            mp1.puuid != mp2.puuid
         ))
-    else: # MATCHUPS
+    else: 
         q = q.where(mp1.team_id != mp2.team_id)
 
     q = q.where(*conditions)
@@ -249,7 +224,7 @@ async def get_player_analytics(
     result = await db.execute(q)
     rows = result.all()
 
-    # 6. Formatage de sortie compatible avec le dictionnaire attendu par le Frontend
+    # Le frontend et la DB s'attendent bien à recevoir UTILITY
     data = {"TOP": [], "JUNGLE": [], "MIDDLE": [], "BOTTOM": [], "UTILITY": []}
     
     for row in rows:
@@ -268,25 +243,19 @@ async def get_player_analytics(
             "wins": wins
         })
         
-    # Tri métier : Les champions les plus rencontrés en premier, puis le winrate
     for pos in data:
         data[pos].sort(key=lambda x: (x["gamesPlayed"], x["winrate"]), reverse=True)
 
     return data
 
 @router.get("/{puuid}/jungle-paths")
-async def get_player_jungle_paths(puuid: str, session: AsyncSession = Depends(get_db)):
+async def get_player_jungle_paths(
+    puuid: str, 
+    champion_id: Optional[int] = Query(None, description="Filtrer par ID de champion"),
+    session: AsyncSession = Depends(get_db)
+):
     """
     Récupère et agglomère les coordonnées spatiales du premier clear jungle.
-    
-    Cette fonction effectue une projection directe sur la table 
-    MatchParticipant pour un PUUID donné. Elle filtre de manière stricte :
-    - Uniquement les parties jouées en JUNGLE.
-    - Uniquement les parties où les coordonnées pos_f1_x sont présentes 
-      (pour éliminer les AFK ou les Remakes prématurés).
-    
-    Elle retourne un format JSON imbriqué spécifiquement conçu pour être 
-    consommé nativement par le composant SVG frontend.
     """
     stmt = select(
         MatchParticipant.team_id,
@@ -295,9 +264,12 @@ async def get_player_jungle_paths(puuid: str, session: AsyncSession = Depends(ge
         MatchParticipant.pos_f3_x, MatchParticipant.pos_f3_y
     ).where(
         MatchParticipant.puuid == puuid,
-        MatchParticipant.team_position == 'JUNGLE',
+        MatchParticipant.lane == 'JUNGLE',
         MatchParticipant.pos_f1_x.isnot(None)
     )
+    
+    if champion_id:
+        stmt = stmt.where(MatchParticipant.champion_id == champion_id)
     
     result = await session.execute(stmt)
     rows = result.fetchall()

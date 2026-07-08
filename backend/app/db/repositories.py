@@ -5,9 +5,12 @@ PROJET  : JungleDiff
 
 DESCRIPTION :
 Couche d'accès aux données (Data Access Layer). Concentre les requêtes SQL 
-complexes utilisant SQLAlchemy 2.0. Déporte la charge de calcul (agrégations, 
-moyennes, tris) sur PostgreSQL pour garantir des temps de réponse minimes au 
-frontend React.
+complexes utilisant SQLAlchemy 2.0.
+
+MODIFICATIONS :
+- NORMALISATION : Retrait de l'override local 'internal_lane'. Les requêtes 
+  s'effectuent désormais avec la valeur littérale fournie par le frontend 
+  (UTILITY), garantissant la résolution parfaite avec la base de données.
 ===============================================================================
 """
 
@@ -31,6 +34,7 @@ class PlayerRepository:
         """
         Calcule les statistiques agrégées (Sidebar) pour un joueur.
         Filtre dynamiquement par lane ou patch si spécifié.
+        Utilise la valeur pure de la lane pour la clause SQL WHERE.
         """
         stmt = (
             select(
@@ -43,7 +47,8 @@ class PlayerRepository:
         )
 
         if lane and lane.upper() != "ALL":
-            stmt = stmt.where(MatchParticipant.position == lane.upper())
+            stmt = stmt.where(MatchParticipant.lane == lane.upper())
+            
         if patch and patch.upper() != "ALL":
             stmt = stmt.where(Match.game_version.startswith(patch))
 
@@ -76,10 +81,7 @@ class MatchRepository:
         self.db = db
 
     async def get_available_patches(self, puuid: str) -> List[str]:
-        """
-        Obligatoire pour éviter une erreur 500 sur la route /{puuid}/patches.
-        Extrait de manière dynamique la liste des patchs disponibles pour un joueur.
-        """
+        """Extrait de manière dynamique la liste des patchs disponibles."""
         stmt = (
             select(Match.game_version)
             .join(MatchParticipant, Match.match_id == MatchParticipant.match_id)
@@ -116,12 +118,6 @@ class MatchRepository:
     ) -> Tuple[List[Dict[str, Any]], bool]:
         """
         Récupère les blocs de match pour l'historique avec pagination temporelle.
-        Utilise l'astuce algorithmique du `limit + 1` pour déterminer si des parties 
-        plus anciennes existent encore en base locale sans exécuter de fonction COUNT()
-        très lourde en ressources.
-        
-        Retourne un tuple contenant la liste des matchs (max: limit) et un booléen
-        indiquant s'il reste des parties locales pour les filtres actifs.
         """
         stmt = (
             select(Match.raw_match_data)
@@ -133,7 +129,7 @@ class MatchRepository:
             stmt = stmt.where(Match.creation_timestamp < end_time)
 
         if lane and lane.upper() != "ALL":
-            stmt = stmt.where(MatchParticipant.position == lane.upper())
+            stmt = stmt.where(MatchParticipant.lane == lane.upper())
             
         if champion_id:
             stmt = stmt.where(MatchParticipant.champion_id == champion_id)
@@ -141,7 +137,6 @@ class MatchRepository:
         if patch and patch.upper() != "ALL":
             stmt = stmt.where(Match.game_version.like(f"{patch}%"))
 
-        # On demande 11 parties au lieu de 10 pour vérifier l'existence d'une page suivante
         stmt = stmt.order_by(desc(Match.creation_timestamp)).limit(limit + 1)
 
         result = await self.db.execute(stmt)
@@ -155,6 +150,7 @@ class MatchRepository:
         return matches, has_more
     
     async def get_match_spell_casts(self, puuid: str, match_id: str) -> dict:
+        """Récupère l'utilisation des sorts pour l'assistant IA."""
         query = select(Match.raw_match_data).where(Match.match_id == match_id)
         result = await self.db.execute(query)
         raw_data = result.scalar_one_or_none()
@@ -164,7 +160,6 @@ class MatchRepository:
 
         participants = raw_data.get("info", {}).get("participants", [])
         
-        # Dictionnaire de traduction des sorts Riot Games
         SUMMONER_MAP = {
             1: "Purge (Cleanse)", 3: "Fatigue (Exhaust)", 4: "Saut Éclair (Flash)",
             6: "Fantôme (Ghost)", 7: "Soin (Heal)", 11: "Châtiment (Smite)",
@@ -177,13 +172,11 @@ class MatchRepository:
                 s2_id = participant.get("summoner2Id")
                 
                 return {
-                    # Champs sémantiques ajoutés pour l'analyse IA
                     "championJoue": participant.get("championName", "Inconnu"),
                     "roleJoue": participant.get("teamPosition", "Inconnu"),
                     "nom_sort_invocateur_1": SUMMONER_MAP.get(s1_id, f"Sort {s1_id}"),
                     "nom_sort_invocateur_2": SUMMONER_MAP.get(s2_id, f"Sort {s2_id}"),
                     
-                    # Champs bruts conservés pour l'hydratation du SpellWidget React
                     "championId": participant.get("championId"),
                     "spell1Casts": participant.get("spell1Casts", 0),
                     "spell2Casts": participant.get("spell2Casts", 0),
@@ -198,16 +191,7 @@ class MatchRepository:
 async def get_global_duos(db: AsyncSession, primary_lane: str, secondary_lane: str):
     """
     Extrait les duos globaux depuis la vue matérialisée et calcule le delta de synergie.
-    
-    Cette fonction utilise des Common Table Expressions (CTE) en SQL brut pour :
-    1. Agréger le winrate individuel de chaque champion sur sa lane respective.
-    2. Agréger le winrate spécifique du duo ciblé.
-    3. Joindre les deux ensembles pour calculer le Delta (Winrate Duo - Moyenne des Winrates Individuels).
-    
-    La gestion du paramètre 'ALL' permet de chercher les duos d'une lane avec le reste de la carte.
     """
-    
-    # Construction dynamique de la clause WHERE selon la présence du filtre secondaire
     if secondary_lane == "ALL":
         where_clause = "(subject_lane = :primary OR target_lane = :primary)"
     else:
@@ -254,18 +238,12 @@ async def get_global_duos(db: AsyncSession, primary_lane: str, secondary_lane: s
         LIMIT 300;
     """
     
-    # Le LIMIT 300 protège la mémoire du frontend sans brider l'analyse de faible volume en DB.
     result = await db.execute(text(query), {"primary": primary_lane, "secondary": secondary_lane})
-    
     return [dict(row._mapping) for row in result]
-
 
 async def get_duo_timeline(db: AsyncSession, champ_a: int, lane_a: str, champ_b: int, lane_b: str):
     """
     Récupère l'évolution du winrate d'un duo précis en fonction de la durée de jeu.
-    
-    Interroge la vue matérialisée en conservant le regroupement par 'duration_bucket' 
-    (tranches de 5 minutes) pour alimenter le graphique Recharts de la console.
     """
     query = """
         SELECT 

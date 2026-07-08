@@ -9,11 +9,12 @@
  * le backend (Data Dragon, ARQ polling) et orchestre le rendu des différentes
  * vues (Historique, Synergies, Assistant IA, et désormais Premier Clear).
  *
- * MODIFICATIONS RÉCENTES :
- * - Intégration de la logique de routage pour la vue 'PREMIER_CLEAR'.
- * - Modification de handleViewChange pour forcer le targetLane à 'JUNGLE'
- *   lorsque l'utilisateur navigue sur la vue de pathing. La Sidebar est ainsi
- *   mise à jour dynamiquement pour n'afficher que les statistiques Jungle.
+ * MODIFICATIONS :
+ * - Remontée d'état (Lifting State Up) : L'état `activeTeam` (Bleu/Rouge) 
+ * pour la vue Premier Clear est désormais géré ici et redescendu aux enfants.
+ * - Liaison de `selectedChampion` à la requête `/jungle-paths` pour filtrer 
+ * la carte en fonction du clic dans la Sidebar.
+ * - Transmission du mode `isPremierClearMode` à la FilterBar.
  * ============================================================================
  */
 
@@ -53,6 +54,9 @@ function App() {
   // NOUVEAUX ÉTATS : Dédiés à la vue Meta Duos
   const [primaryLane, setPrimaryLane] = useState('JUNGLE');
   const [secondaryLane, setSecondaryLane] = useState('ALL');
+
+  // NOUVEL ÉTAT : Dédié à la vue Premier Clear (Remontée d'état)
+  const [activeTeam, setActiveTeam] = useState(100);
 
   const [championStats, setChampionStats] = useState([]);
   const [selectedChampion, setSelectedChampion] = useState(null);
@@ -288,13 +292,17 @@ function App() {
   useEffect(() => {
     /**
      * Charge les données agrégées du pathing jungle.
-     * Se déclenche uniquement lorsque l'utilisateur bascule sur la vue 
-     * PREMIER_CLEAR pour éviter des appels réseaux inutiles sur les autres vues.
+     * Prend désormais en compte le champion sélectionné dans la Sidebar pour
+     * transmettre l'ID au backend.
      */
     const fetchJunglePaths = async () => {
       if (currentMainView === 'PREMIER_CLEAR' && currentPuuid) {
         try {
-          const res = await axios.get(`http://localhost:8000/api/v1/players/${currentPuuid}/jungle-paths`);
+          let url = `http://localhost:8000/api/v1/players/${currentPuuid}/jungle-paths`;
+          if (selectedChampion) {
+            url += `?champion_id=${selectedChampion}`;
+          }
+          const res = await axios.get(url);
           setJunglePaths(res.data.paths);
         } catch (error) {
           console.error("Erreur lors de la récupération des routes jungle:", error);
@@ -303,7 +311,7 @@ function App() {
     };
 
     fetchJunglePaths();
-  }, [currentMainView, currentPuuid]);
+  }, [currentMainView, currentPuuid, selectedChampion]);
 
   return (
     <div className="h-screen p-6 overflow-hidden flex flex-col">
@@ -375,6 +383,11 @@ function App() {
                   onPatchChange={setPatchFilter}
                   refreshTrigger={refreshTrigger}
 
+                  // Nouvelles Props : Mode Premier Clear
+                  isPremierClearMode={currentMainView === 'PREMIER_CLEAR'}
+                  activeTeam={activeTeam}
+                  onTeamChange={setActiveTeam}
+
                   {...(currentMainView === 'SYNERGIES' ? {
                     timeFilter: timeFilter,
                     onTimeFilterChange: setTimeFilter,
@@ -439,14 +452,13 @@ function App() {
                 />
               )}
 
-              {/* NOUVELLE VUE : Analyse du First Clear Jungle */}
+              {/* VUE : Analyse du First Clear Jungle */}
               {currentMainView === 'PREMIER_CLEAR' && (
                 <div className="flex flex-col flex-1 min-h-0 bg-surface-solid rounded-lg border border-border-glass p-6 overflow-y-auto">
                   <h2 className="text-xl font-bold text-gray-100 mb-2 text-center">Analyse du Premier Clear</h2>
                   <p className="text-center text-lol-info mb-6 text-sm">Le filtre de contexte est verrouillé sur le rôle de Jungler.</p>
 
-                  {/* On passe maintenant le tableau rempli par l'API au lieu de la donnée vide */}
-                  <JunglePathingMap data={junglePaths} />
+                  <JunglePathingMap data={junglePaths} activeTeam={activeTeam} />
                 </div>
               )}
             </div>
