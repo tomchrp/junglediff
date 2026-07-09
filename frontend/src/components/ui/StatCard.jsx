@@ -4,42 +4,48 @@
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Composant générique du System Design pour l'affichage d'une carte de statistique.
- * Encapsule la logique de disposition Flexbox pour garantir un alignement 
- * vertical parfait entre plusieurs cartes d'une même grille, indépendamment 
- * de la présence ou non d'un contenu supplémentaire en pied de carte.
+ * Composant de présentation générique pour un indicateur de performance (KPI).
+ * Utilisé à divers endroits de l'application (Sidebar, Détails de match).
+ * 
+ * MODIFICATIONS RECENTES (Refonte UI) :
+ * - Refonte esthétique pour le "Nested Glassmorphism" : les cartes adoptent 
+ *   un fond sombre (bg-black/20) avec une bordure vitrée très fine pour 
+ *   se démarquer du panneau parent sans l'alourdir visuellement.
+ * - Fort contraste typographique entre la valeur brute et le label.
  * ============================================================================
  */
 
 import React from 'react';
 
-const StatCard = ({ title, children, footer }) => {
-    /**
-     * Rend la carte avec une distribution architecturée stricte.
-     * Flex-col avec h-full force la carte à prendre la hauteur de la grille.
-     * La div centrale avec flex-1 absorbe l'espace vide, poussant le titre
-     * en haut et le footer (si existant) tout en bas.
-     * 
-     * @returns {JSX.Element} La carte formatée.
-     */
+/**
+ * Affiche une métrique formatée avec son label et un éventuel icône.
+ * @param {string} title - Le titre ou label de la métrique (ex: "Dégâts").
+ * @param {string|number} value - La valeur principale à mettre en évidence.
+ * @param {string} subtitle - Information secondaire optionnelle sous la valeur.
+ * @param {React.ReactNode} icon - Icône contextuel optionnel.
+ * @param {boolean} highlight - Si vrai, applique la couleur dorée à la valeur.
+ * @param {string} className - Classes CSS additionnelles pour surcharger le style.
+ */
+const StatCard = ({ title, value, subtitle, icon, highlight, className = '' }) => {
     return (
-        <div className="bg-surface-solid border border-border-glass rounded-md p-4 flex flex-col h-full">
-            {/* Zone fixe : Titre */}
-            <div className="text-lol-textMuted text-[10px] uppercase font-bold tracking-wider mb-4 text-center">
-                {title}
+        <div className={`bg-black/20 rounded-lg p-3 border border-border-glass flex flex-col justify-center relative overflow-hidden ${className}`}>
+            <div className="flex justify-between items-start mb-1">
+                <span className="text-lol-textMuted text-[10px] uppercase tracking-wider font-bold z-10">
+                    {title}
+                </span>
+                {icon && <span className="text-gray-400 z-10">{icon}</span>}
             </div>
 
-            {/* Zone flexible : Contenu principal (Jauges, Valeurs, Listes) */}
-            <div className="flex-1 flex flex-col items-center justify-center w-full">
-                {children}
+            <div className="flex items-baseline gap-2 z-10">
+                <span className={`text-xl font-bold drop-shadow-sm ${highlight ? 'text-lol-gold' : 'text-gray-100'}`}>
+                    {value}
+                </span>
+                {subtitle && (
+                    <span className="text-lol-textMuted text-xs font-medium">
+                        {subtitle}
+                    </span>
+                )}
             </div>
-
-            {/* Zone fixe optionnelle : Pied de page (Ratios, Sous-stats) */}
-            {footer && (
-                <div className="mt-auto pt-4 flex flex-col items-center justify-center w-full">
-                    {footer}
-                </div>
-            )}
         </div>
     );
 };

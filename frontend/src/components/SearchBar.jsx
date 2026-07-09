@@ -5,9 +5,11 @@
  *
  * DESCRIPTION :
  * Composant de recherche global avec historique intégré.
- * Intercepte la saisie du Riot ID, gère l'affichage du menu déroulant 
- * contenant les profils récents (localStorage) et déclenche la navigation 
- * web via React Router au lieu d'appeler directement l'API.
+ * * MODIFICATIONS RECENTES :
+ * - Intégration du composant <CustomSelect> pour le choix du serveur.
+ * - L'input texte devient une cavité (bg-black/20, shadow-inner).
+ * - Le dropdown de l'historique devient une vitre (backdrop-blur-xl).
+ * - Le bouton d'action principal adopte le comportement interactif du verre.
  * ============================================================================
  */
 
@@ -15,6 +17,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, Loader2, X, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getRecentProfiles, removeProfileFromHistory } from '../services/historyService.js';
+import CustomSelect from './ui/CustomSelect.jsx';
+
+const SERVER_OPTIONS = [
+    { value: 'EUW', label: 'EUW' },
+    { value: 'NA', label: 'NA' },
+    { value: 'KR', label: 'KR' }
+];
 
 const SearchBar = ({ isSyncing }) => {
     const [server, setServer] = useState('EUW');
@@ -26,12 +35,10 @@ const SearchBar = ({ isSyncing }) => {
     const navigate = useNavigate();
     const containerRef = useRef(null);
 
-    // Charge les profils au montage du composant
     useEffect(() => {
         setRecentProfiles(getRecentProfiles());
-    }, [showDropdown]); // Rafraîchit la liste à chaque ouverture
+    }, [showDropdown]);
 
-    // Gestion du clic en dehors du composant pour fermer le menu déroulant
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
@@ -42,11 +49,6 @@ const SearchBar = ({ isSyncing }) => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    /**
-     * Intercepte la soumission, valide le format et pousse la nouvelle URL.
-     * Le backend n'est pas appelé ici. C'est le changement d'URL qui 
-     * déclenchera l'analyse dans App.jsx.
-     */
     const handleSubmit = (e) => {
         e.preventDefault();
         setLocalError('');
@@ -66,7 +68,6 @@ const SearchBar = ({ isSyncing }) => {
         }
 
         setShowDropdown(false);
-        // Navigation sémantique par défaut vers l'historique lors d'une nouvelle recherche
         navigate(`/historique/${server.toLowerCase()}/${gameName}-${tagLine}`);
     };
 
@@ -78,7 +79,7 @@ const SearchBar = ({ isSyncing }) => {
     };
 
     const handleDeleteProfile = (e, id) => {
-        e.stopPropagation(); // Empêche le clic de déclencher la navigation
+        e.stopPropagation();
         removeProfileFromHistory(id);
         setRecentProfiles(getRecentProfiles());
     };
@@ -87,16 +88,15 @@ const SearchBar = ({ isSyncing }) => {
         <div className="glass-panel p-4 mb-8 relative z-50" ref={containerRef}>
             <form onSubmit={handleSubmit} className="flex flex-wrap md:flex-nowrap gap-3 items-center relative">
 
-                <select
-                    value={server}
-                    onChange={(e) => setServer(e.target.value)}
-                    disabled={isSyncing}
-                    className="bg-surface-solid text-gray-100 px-4 py-2 outline-none border border-border-strong focus:border-lol-gold rounded-md cursor-pointer disabled:opacity-50 transition-colors"
-                >
-                    <option value="EUW">EUW</option>
-                    <option value="NA">NA</option>
-                    <option value="KR">KR</option>
-                </select>
+                {/* Remplacement du <select> natif par le CustomSelect (avec hauteur fixée) */}
+                <div className="w-[120px] shrink-0">
+                    <CustomSelect
+                        value={server}
+                        options={SERVER_OPTIONS}
+                        onChange={setServer}
+                        buttonClassName="h-[42px] text-sm font-bold"
+                    />
+                </div>
 
                 <div className="flex-1 min-w-[250px] relative">
                     <input
@@ -106,14 +106,14 @@ const SearchBar = ({ isSyncing }) => {
                         onChange={(e) => setRiotId(e.target.value)}
                         onFocus={() => setShowDropdown(true)}
                         disabled={isSyncing}
-                        className={`w-full bg-surface-solid text-gray-100 px-4 py-2 outline-none border rounded-md disabled:opacity-50 transition-colors ${localError ? 'border-lol-loss focus:border-lol-loss' : 'border-border-strong focus:border-lol-gold'}`}
+                        className={`w-full bg-black/20 shadow-inner text-gray-100 px-4 py-2 outline-none border rounded-md disabled:opacity-50 transition-all duration-200 placeholder-gray-500 ${localError ? 'border-lol-loss focus:border-lol-loss focus:bg-black/30' : 'border-border-glass focus:border-lol-gold focus:bg-black/30'}`}
                         required
                     />
 
-                    {/* Menu déroulant de l'historique */}
+                    {/* Menu déroulant de l'historique (Glassmorphism) */}
                     {showDropdown && recentProfiles.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-surface-elevated border border-border-glass rounded-md shadow-lg overflow-hidden flex flex-col">
-                            <div className="px-4 py-2 bg-surface-solid border-b border-border-glass text-xs font-bold text-lol-textMuted uppercase tracking-wider flex items-center gap-2">
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-surface/90 backdrop-blur-xl border border-border-glass rounded-md shadow-glass overflow-hidden flex flex-col z-50">
+                            <div className="px-4 py-2 bg-black/30 shadow-inner border-b border-border-glass text-xs font-bold text-lol-textMuted uppercase tracking-wider flex items-center gap-2">
                                 <Clock className="w-4 h-4" />
                                 Profils récents
                             </div>
@@ -121,13 +121,13 @@ const SearchBar = ({ isSyncing }) => {
                                 <div
                                     key={profile.id}
                                     onClick={() => handleProfileClick(profile)}
-                                    className="flex items-center justify-between px-4 py-3 hover:bg-surface-solid cursor-pointer transition-colors group"
+                                    className="flex items-center justify-between px-4 py-3 hover:bg-white/5 cursor-pointer transition-colors group border-b border-border-glass/30 last:border-0"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xs font-bold bg-app px-2 py-1 rounded text-lol-gold border border-lol-gold/20">
+                                        <span className="text-xs font-bold bg-black/40 shadow-inner px-2 py-1 rounded text-lol-gold border border-border-glass">
                                             {profile.server.toUpperCase()}
                                         </span>
-                                        <span className="text-gray-100 font-medium">
+                                        <span className="text-gray-100 font-medium drop-shadow-sm">
                                             {profile.gameName}
                                             <span className="text-lol-textMuted">#{profile.tagLine}</span>
                                         </span>
@@ -146,10 +146,11 @@ const SearchBar = ({ isSyncing }) => {
                     )}
                 </div>
 
+                {/* Bouton avec retour physique du Glassmorphism Interactive */}
                 <button
                     type="submit"
                     disabled={isSyncing || !riotId}
-                    className="bg-lol-gold text-app font-bold px-6 py-2 rounded-md hover:bg-lol-goldHover shadow-glow-gold transition-all flex items-center justify-center gap-2 min-w-[140px] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                    className="glass-panel-interactive px-6 py-2 text-sm font-bold text-lol-gold uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-glow-gold flex items-center justify-center gap-2 min-w-[140px] h-[42px]"
                 >
                     {isSyncing ? (
                         <>
@@ -166,7 +167,7 @@ const SearchBar = ({ isSyncing }) => {
             </form>
 
             {localError && (
-                <div className="text-lol-loss text-sm mt-2 ml-1 font-medium">
+                <div className="text-lol-loss text-sm mt-2 ml-1 font-medium drop-shadow-sm">
                     {localError}
                 </div>
             )}

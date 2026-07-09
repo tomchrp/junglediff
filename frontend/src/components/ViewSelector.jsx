@@ -5,12 +5,11 @@
  *
  * DESCRIPTION :
  * Composant de navigation principale permettant de basculer entre les
- * différentes vues de l'application (Historique, Synergies, Assistant IA,
- * Analyse Globale du Big Data, Meta Duos et Premier Clear).
- * 
- * MODIFICATIONS :
- * - Ajout du bouton d'accès à l'état META_DUOS.
- * - Ajout du bouton d'accès à l'état PREMIER_CLEAR pour l'analyse du pathing.
+ * différentes vues de l'application.
+ * * MODIFICATIONS RECENTES :
+ * - Remplacement des couleurs solides par le système Glassmorphism : 
+ * Conteneur vitré (`glass-panel`), onglet actif creusé (`bg-black/30`), 
+ * onglets inactifs réactifs au survol (`hover:bg-white/5`).
  * ============================================================================
  */
 import React from 'react';
@@ -19,25 +18,23 @@ export default function ViewSelector({ currentView, onViewChange }) {
 
     /**
      * getButtonClass
-     * 
-     * DESCRIPTION :
-     * Détermine les classes utilitaires Tailwind à appliquer sur un onglet
-     * en fonction de son état d'activation, garantissant la cohérence avec
-     * le Design System (text-lol-gold pour l'état actif).
-     * 
-     * @param {string} viewName - L'identifiant de la vue (ex: 'META_DUOS')
+     * * DESCRIPTION :
+     * Détermine les classes utilitaires Tailwind à appliquer sur un onglet.
+     * * @param {string} viewName - L'identifiant de la vue (ex: 'META_DUOS')
      * @returns {string} La chaîne de classes CSS complète
      */
     const getButtonClass = (viewName) => {
-        const baseClass = "px-4 py-2 rounded-md font-bold text-sm tracking-wider uppercase transition-all whitespace-nowrap";
-        const activeClass = "bg-lol-gold text-app shadow-glow-gold";
-        const inactiveClass = "text-lol-textMuted hover:text-gray-100 hover:bg-surface-elevated";
+        const baseClass = "px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest whitespace-nowrap transition-all duration-200";
+        // État actif : Aspect enfoncé dans la vitre
+        const activeClass = "bg-black/30 shadow-inner border border-border-glass/50 text-lol-gold";
+        // État inactif : Plat avec illumination au survol
+        const inactiveClass = "text-lol-textMuted hover:bg-white/5 hover:text-gray-200 border border-transparent";
 
         return `${baseClass} ${currentView === viewName ? activeClass : inactiveClass}`;
     };
 
     return (
-        <div className="glass-panel p-2 flex gap-2 shrink-0 overflow-x-auto custom-scrollbar">
+        <div className="glass-panel p-1.5 flex gap-1 shrink-0 overflow-x-auto custom-scrollbar z-20 relative">
             <button
                 className={getButtonClass('HISTORIQUE')}
                 onClick={() => onViewChange('HISTORIQUE')}
@@ -68,7 +65,6 @@ export default function ViewSelector({ currentView, onViewChange }) {
             >
                 Meta Duos
             </button>
-            {/* NOUVEL ONGLET : PREMIER CLEAR */}
             <button
                 className={getButtonClass('PREMIER_CLEAR')}
                 onClick={() => onViewChange('PREMIER_CLEAR')}

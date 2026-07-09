@@ -233,24 +233,27 @@ const FilterBar = ({
                 Filtres :
             </span>
 
-            {/* Section Rôles (Lanes) */}
+            {/* Section Rôles (Lanes) - Correction des bordures et ajout de l'enfoncement */}
             <div className="flex gap-2 items-center">
-                {LANES.map(lane => (
-                    <button
-                        key={lane.id}
-                        onClick={() => handleLaneToggle(lane.id)}
-                        title={lane.label}
-                        className="transition-transform hover:scale-105 outline-none focus:outline-none rounded-md"
-                    >
-                        <Avatar
-                            type="rune"
-                            size="sm"
-                            src={`/assets/lanes/${lane.icon}.png`}
-                            alt={lane.label}
-                            isSelected={currentLane === lane.id}
-                        />
-                    </button>
-                ))}
+                {LANES.map(lane => {
+                    const isActive = currentLane === lane.id;
+                    return (
+                        <button
+                            key={lane.id}
+                            onClick={() => handleLaneToggle(lane.id)}
+                            title={lane.label}
+                            className={`transition-all outline-none focus:outline-none rounded-md p-1 ${isActive ? 'bg-black/30 shadow-inner' : 'hover:bg-white/5'}`}
+                        >
+                            <Avatar
+                                type="rune"
+                                size="sm"
+                                src={`/assets/lanes/${lane.icon}.png`}
+                                alt={lane.label}
+                                isSelected={isActive}
+                            />
+                        </button>
+                    );
+                })}
             </div>
 
             <div className="h-8 w-px bg-border-glass mx-2"></div>
@@ -285,6 +288,7 @@ const FilterBar = ({
                 </div>
             ) : (
                 <div className="animate-fade-in">
+                    {/* Le composant CustomSelect doit lui aussi être mis à jour en interne pour utiliser bg-black/20 et non bg-surface-solid */}
                     <CustomSelect
                         value={currentPatch}
                         options={patchOptions}

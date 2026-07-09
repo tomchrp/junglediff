@@ -5,12 +5,11 @@
  *
  * DESCRIPTION :
  * Composant parent (Orchestrateur) pour l'affichage détaillé d'un match.
- * 
- * MODIFICATIONS RECENTES :
- * - Remplacement de toutes les balises <img> brutes par la primitive <Avatar>.
- * - Harmonisation totale des bordures, tailles et fonds (system design).
- * - Correction de l'ergonomie : le survol (hover) ne s'applique qu'à l'en-tête cliquable.
- * - Transmission de la durée de partie (gameDuration) au composant MatchCardSummary pour les calculs de CS/min.
+ * * MODIFICATIONS RECENTES :
+ * - Le liseré de victoire/défaite (glowClass) s'étend dynamiquement.
+ * - CORRECTION : L'animation de survol et les ombres portées sont appliquées
+ * sur le conteneur racine pour embarquer tous les calques (dont le liseré).
+ * - CORRECTION : Le cursor-pointer est maintenu sur le header même ouvert.
  * ============================================================================
  */
 
@@ -18,7 +17,7 @@ import React, { useState, useEffect } from 'react';
 import MatchCardSummary from './MatchCardSummary.jsx';
 import MatchCardDivers from './MatchCardDivers.jsx';
 import RoleAnalysisController from './roles/RoleAnalysisController.jsx';
-import Avatar from '../ui/Avatar.jsx'; // NOUVEL IMPORT OBLIGATOIRE
+import Avatar from '../ui/Avatar.jsx';
 
 const SUMMONER_SPELLS = { 4: "SummonerFlash", 11: "SummonerSmite", 12: "SummonerTeleport", 14: "SummonerDot", 7: "SummonerHeal", 6: "SummonerHaste", 3: "SummonerExhaust", 21: "SummonerBarrier", 1: "SummonerBoost", 32: "SummonerSnowball" };
 const RUNE_PATHS = { 8000: "7201_Precision", 8100: "7200_Domination", 8200: "7202_Sorcery", 8300: "7203_Whimsy", 8400: "7204_Resolve" };
@@ -64,10 +63,6 @@ const ROLE_ORDER = {
     'TOP': 1, 'JUNGLE': 2, 'MIDDLE': 3, 'BOTTOM': 4, 'UTILITY': 5
 };
 
-/**
- * Trie les participants de l'équipe pour correspondre à l'ordre canonique des rôles.
- * Top -> Jungle -> Mid -> Bot -> Support
- */
 const sortTeamByRole = (participants) => {
     return [...participants].sort((a, b) => {
         const orderA = ROLE_ORDER[a.teamPosition] || 99;
@@ -120,11 +115,6 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
     const totalCS = (currentPlayer.totalMinionsKilled || 0) + (currentPlayer.neutralMinionsKilled || 0);
     const csPerMin = info.gameDuration > 0 ? (totalCS / (info.gameDuration / 60)).toFixed(1) : "0.0";
 
-    /**
-     * Polling asynchrone pour la récupération en arrière-plan de la timeline.
-     * Cette fonction vérifie le statut du cache ou de l'appel Riot côté backend
-     * et pré-charge les parties adjacentes pour fluidifier l'expérience.
-     */
     useEffect(() => {
         let pollingTimeoutId;
         let graceTimeoutId;
@@ -196,18 +186,34 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
         setIsOpen(!isOpen);
     };
 
-    const accentClass = isWin ? 'border-l-lol-win' : 'border-l-lol-loss';
+    const glowClass = isWin ? 'shadow-glow-win' : 'shadow-glow-loss';
+
     const kdaRatio = currentPlayer.deaths > 0
         ? ((currentPlayer.kills + currentPlayer.assists) / currentPlayer.deaths).toFixed(2)
         : 'Parfait';
 
-    return (
-        <div className={`mb-3 glass-panel border-l-4 overflow-hidden transition-all duration-200 ease-in-out ${accentClass}`}>
-            <div onClick={handleCardClick} className="px-5 py-4 flex items-center justify-between w-full select-none cursor-pointer hover:bg-white/5 transition-colors">
+    // Les classes de survol physiques sont gérées sur le parent
+    const rootClasses = isOpen
+        ? 'shadow-glass'
+        : 'shadow-glass hover:shadow-glass-elevated hover:-translate-y-[2px] hover:border-border-strong border-transparent';
 
+    const headerClasses = isOpen
+        ? 'bg-surface border border-border-glass rounded-t-xl border-b-transparent z-20 cursor-pointer'
+        : 'bg-surface border border-border-glass rounded-xl z-10 cursor-pointer';
+
+    return (
+        <div className={`mb-3 flex flex-col w-full relative rounded-xl transition-all duration-200 ${rootClasses}`}>
+
+            {/* Liseré global englobant toute la hauteur de la carte */}
+            <div className={`absolute inset-0 pointer-events-none rounded-xl z-30 ${glowClass}`}></div>
+
+            <div
+                onClick={handleCardClick}
+                className={`px-5 py-4 flex items-center justify-between w-full select-none relative transition-colors duration-200 ${headerClasses}`}
+            >
                 {/* 1. Bloc Métadonnées */}
-                <div className="w-[80px] shrink-0 flex flex-col items-center justify-center text-center">
-                    <div className="text-gray-100 font-bold text-xs uppercase tracking-wide">
+                <div className="w-[80px] shrink-0 flex flex-col items-center justify-center text-center relative z-10">
+                    <div className="text-gray-200 font-bold text-[11px] uppercase tracking-wider drop-shadow-sm">
                         {queueName}
                     </div>
                     <div className="text-lol-textMuted text-xs font-medium mt-1">
@@ -216,12 +222,10 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                 </div>
 
                 {/* 2. Bloc Affrontement (Matchup) */}
-                <div className="flex items-center justify-center w-[80px] shrink-0">
+                <div className="flex items-center justify-center w-[80px] shrink-0 relative z-10">
                     <div className="relative w-[80px] h-16">
-
-                        {/* Adversaire (Arrière-plan, décalé en haut à droite) */}
                         {opponent && (
-                            <div className="absolute top-0 right-0 z-0">
+                            <div className="absolute top-0 right-0 z-0 opacity-80">
                                 <Avatar
                                     type="champion"
                                     size="base"
@@ -229,23 +233,19 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                     alt="Opponent"
                                     className="brightness-75 grayscale-[20%]"
                                 />
-                                {/* Badge VS (Passage de bg-surface-elevated à bg-surface-solid pour l'harmonie) */}
                                 <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-surface-solid border border-border-strong rounded-md flex items-center justify-center text-[9px] font-bold text-lol-textMuted shadow-sm z-10">
                                     VS
                                 </div>
                             </div>
                         )}
-
-                        {/* Joueur (Premier plan, décalé en bas à gauche) */}
                         <div className="absolute bottom-0 left-0 z-10">
                             <Avatar
                                 type="champion"
                                 size="md"
                                 src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${currentUserChampImage}.png`}
                                 alt={currentUserChampImage}
-                                className="shadow-md"
+                                className="shadow-glass"
                             />
-                            {/* Badge Lane */}
                             {currentPlayer.teamPosition && (
                                 <div className="absolute -bottom-1.5 -left-1.5 z-20">
                                     <Avatar
@@ -258,15 +258,14 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                 </div>
                             )}
                         </div>
-
                     </div>
                 </div>
 
                 {/* 3. Bloc Performances */}
-                <div className="flex items-center justify-center gap-4 shrink-0 w-[160px]">
+                <div className="flex items-center justify-center gap-4 shrink-0 w-[160px] relative z-10">
                     <div className="text-center w-[80px]">
-                        <div className="text-gray-100 font-bold text-sm">
-                            {currentPlayer.kills} / <span className="text-lol-loss">{currentPlayer.deaths}</span> / {currentPlayer.assists}
+                        <div className="text-white font-bold text-[15px] drop-shadow-md">
+                            {currentPlayer.kills} <span className="text-lol-textMuted/50 font-normal">/</span> <span className="text-lol-loss font-semibold">{currentPlayer.deaths}</span> <span className="text-lol-textMuted/50 font-normal">/</span> {currentPlayer.assists}
                         </div>
                         <div className="text-lol-textMuted text-xs mt-0.5 font-medium">
                             {kdaRatio} KDA
@@ -274,8 +273,8 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                     </div>
 
                     <div className="text-center w-[60px]">
-                        <div className="text-gray-100 font-bold text-sm flex items-center justify-center">
-                            {totalCS} <span className="text-lol-textMuted text-[10px] uppercase tracking-wider ml-1">CS</span>
+                        <div className="text-white font-bold text-[15px] drop-shadow-md flex items-center justify-center">
+                            {totalCS} <span className="text-lol-textMuted text-[9px] uppercase tracking-wider ml-1 opacity-80">CS</span>
                         </div>
                         <div className="text-lol-textMuted text-xs mt-0.5 font-medium">
                             {csPerMin} / min
@@ -284,7 +283,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                 </div>
 
                 {/* 4. Bloc Équipement */}
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-3 shrink-0 relative z-10">
                     <div className="flex gap-1 items-center shrink-0">
                         <div className="flex flex-col gap-0.5">
                             {[currentPlayer.summoner1Id, currentPlayer.summoner2Id].map((id, index) => (
@@ -325,14 +324,14 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                     alt="Objet"
                                 />
                             ) : (
-                                <div key={idx} className="w-7 h-7 bg-surface-solid rounded-md border border-border-glass shrink-0"></div>
+                                <div key={idx} className="w-7 h-7 bg-surface-solid rounded-md border border-border-glass shrink-0 opacity-50"></div>
                             )
                         ))}
                     </div>
                 </div>
 
                 {/* 5. Bloc Compositions */}
-                <div className="flex flex-col gap-[3px] shrink-0 w-[110px]">
+                <div className="flex flex-col gap-[3px] shrink-0 w-[110px] relative z-10">
                     <div className="flex gap-[2px]">
                         {sortedTeam100.map(p => (
                             <Avatar
@@ -342,7 +341,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                 isSelected={p.puuid === playerPuuid}
                                 src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`}
                                 alt={getChampionImageName(p.championId)}
-                                className={p.puuid !== playerPuuid ? "opacity-80" : ""}
+                                className={p.puuid !== playerPuuid ? "opacity-60" : "shadow-glow-gold"}
                             />
                         ))}
                     </div>
@@ -355,29 +354,28 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                 isSelected={p.puuid === playerPuuid}
                                 src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${getChampionImageName(p.championId)}.png`}
                                 alt={getChampionImageName(p.championId)}
-                                className={p.puuid !== playerPuuid ? "opacity-80" : ""}
+                                className={p.puuid !== playerPuuid ? "opacity-60" : "shadow-glow-gold"}
                             />
                         ))}
                     </div>
                 </div>
-
             </div>
 
             {/* ACCORDÉON DÉROULANT */}
             {isOpen && (
-                <div className="border-t border-border-glass bg-app/50 p-3">
-                    <div className="flex gap-4 border-b border-border-strong pb-2 mb-2 px-2">
-                        <button onClick={() => setActiveTab('resume')} className={`text-xs font-bold uppercase tracking-wider transition-colors pb-1 ${activeTab === 'resume' ? 'text-lol-gold border-b-2 border-lol-gold' : 'text-lol-textMuted hover:text-gray-200'}`}>
+                <div className="glass-panel border-t-0 rounded-t-none bg-surface-solid/80 p-3 relative z-10 animate-[fadeIn_0.2s_ease-out]">
+                    <div className="flex gap-4 border-b border-border-glass pb-2 mb-2 px-2">
+                        <button onClick={() => setActiveTab('resume')} className={`text-[11px] font-bold uppercase tracking-widest transition-colors pb-1 ${activeTab === 'resume' ? 'text-lol-gold border-b-2 border-lol-gold drop-shadow-md' : 'text-lol-textMuted hover:text-gray-200'}`}>
                             Résumé
                         </button>
 
                         {(currentPlayer.teamPosition === 'JUNGLE' || currentPlayer.teamPosition === 'UTILITY') && (
-                            <button onClick={() => setActiveTab('role_analysis')} className={`text-xs font-bold uppercase tracking-wider transition-colors pb-1 ${activeTab === 'role_analysis' ? 'text-lol-info border-b-2 border-lol-info' : 'text-lol-textMuted hover:text-gray-200'}`}>
+                            <button onClick={() => setActiveTab('role_analysis')} className={`text-[11px] font-bold uppercase tracking-widest transition-colors pb-1 ${activeTab === 'role_analysis' ? 'text-lol-info border-b-2 border-lol-info drop-shadow-md' : 'text-lol-textMuted hover:text-gray-200'}`}>
                                 Analyse {currentPlayer.teamPosition}
                             </button>
                         )}
 
-                        <button onClick={() => setActiveTab('divers')} className={`text-xs font-bold uppercase tracking-wider transition-colors pb-1 ${activeTab === 'divers' ? 'text-lol-gold border-b-2 border-lol-gold' : 'text-lol-textMuted hover:text-gray-200'}`}>
+                        <button onClick={() => setActiveTab('divers')} className={`text-[11px] font-bold uppercase tracking-widest transition-colors pb-1 ${activeTab === 'divers' ? 'text-lol-gold border-b-2 border-lol-gold drop-shadow-md' : 'text-lol-textMuted hover:text-gray-200'}`}>
                             Divers
                         </button>
                     </div>

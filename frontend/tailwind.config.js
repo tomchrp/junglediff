@@ -18,38 +18,60 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Fond absolu de l'application (Quasi-noir pour contraste maximal)
         app: '#050505',
-
-        // Palette des surfaces (Glassmorphism sur base neutre/grise)
         surface: {
-          DEFAULT: 'rgba(18, 18, 18, 0.6)',  // État de repos
-          elevated: 'rgba(38, 38, 38, 0.8)', // État survolé ou actif
-          solid: '#121212',                  // Repli opaque
+          DEFAULT: 'rgba(18, 18, 18, 0.6)',
+          elevated: 'rgba(38, 38, 38, 0.8)',
+          solid: '#121212',
         },
-
-        // Sémantique des bordures (très subtiles)
         border: {
           glass: 'rgba(255, 255, 255, 0.06)',
-          strong: 'rgba(255, 255, 255, 0.12)',
+          strong: 'rgba(255, 255, 255, 0.15)',
         },
-
-        // Sémantique métier League of Legends
         lol: {
           gold: '#c8aa6e',
           goldHover: '#f0e6d2',
-          win: '#4ade80',    // Vert optimisé
+          win: '#0ea5e9',    // Bleu Cyan classique LoL
           loss: '#f87171',   // Rouge sourd
           info: '#38bdf8',
-          textMuted: '#94a3b8' // Texte secondaire
+          textMuted: '#94a3b8'
         }
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
-        glass: '0 12px 40px 0 rgba(0, 0, 0, 0.6)', // Ombre plus forte pour détacher du fond noir
-        'glow-gold': '0 0 15px rgba(200, 170, 110, 0.2)', // Glow adouci
+        glass: '0 12px 40px 0 rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.05)',
+        'glass-elevated': '0 20px 50px 0 rgba(0, 0, 0, 0.8), inset 0 1px 0 0 rgba(255, 255, 255, 0.1)',
+        'glow-gold': '0 0 15px rgba(200, 170, 110, 0.2)',
+
+        // Liseré strict sur la gauche, incrusté, sans aucun flou
+        'glow-win': 'inset 3px 0 0 0 rgba(14, 165, 233, 0.9)',
+        'glow-loss': 'inset 3px 0 0 0 rgba(248, 113, 113, 0.9)',
+      },
+      keyframes: {
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
+        ambientDrift: {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '33%': { transform: 'translate(2%, -2%) scale(1.05)' },
+          '66%': { transform: 'translate(-2%, 2%) scale(0.95)' },
+        },
+        ambientPulse: {
+          '0%, 100%': { opacity: '0.05' },
+          '50%': { opacity: '0.08' },
+        },
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        }
+      },
+      animation: {
+        'shimmer': 'shimmer 2s infinite',
+        'ambient-drift': 'ambientDrift 20s ease-in-out infinite',
+        'ambient-pulse': 'ambientPulse 15s ease-in-out infinite',
+        'fade-in': 'fadeIn 0.4s ease-out forwards',
       }
     },
   },

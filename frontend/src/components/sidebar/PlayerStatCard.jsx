@@ -1,65 +1,80 @@
 /**
  * ============================================================================
- * FICHIER : frontend/src/components/profile/UpdatePlayerButton.jsx
+ * FICHIER : frontend/src/components/sidebar/PlayerStatCard.jsx
  * PROJET  : JungleDiff
  *
  * DESCRIPTION :
- * Bouton d'action avec verrouillage anti-DDOS.
- * Protège le quota de l'API Riot en bloquant les requêtes manuelles
- * pendant 120 secondes après chaque clic. L'état persiste via localStorage.
+ * Carte de profil du joueur affichée en haut de la Sidebar.
+ * * MODIFICATIONS RECENTES :
+ * - CORRECTION UI : Ajout de la classe `shrink-0` sur le conteneur principal.
+ * Cela empêche Flexbox de compresser la carte et de cacher son contenu 
+ * lorsque la liste des champions située en dessous devient trop longue.
+ * - CORRECTION SYNTAXE : Suppression du commentaire JSX invalide à la racine 
+ * du return.
  * ============================================================================
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-const UpdatePlayerButton = ({ onUpdate, isSyncing, puuid }) => {
-    const [cooldown, setCooldown] = useState(0);
+const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, versionDDragon }) => {
+    if (!summary) return null;
 
-    useEffect(() => {
-        if (!puuid) return;
+    // Calcul dynamique basé sur le filtre actif (championStats)
+    const totalGames = championStats.length > 0
+        ? championStats.reduce((acc, curr) => acc + curr.gamesPlayed, 0)
+        : summary.totalGames || 0;
 
-        const checkCooldown = () => {
-            const lockTime = localStorage.getItem(`update_lock_${puuid}`);
-            if (lockTime) {
-                const remaining = Math.ceil((parseInt(lockTime) - Date.now()) / 1000);
-                if (remaining > 0) {
-                    setCooldown(remaining);
-                } else {
-                    setCooldown(0);
-                    localStorage.removeItem(`update_lock_${puuid}`);
-                }
-            }
-        };
+    const totalWins = championStats.length > 0
+        ? championStats.reduce((acc, curr) => acc + curr.wins, 0)
+        : 0;
 
-        checkCooldown(); // Vérification initiale
-        const interval = setInterval(checkCooldown, 1000); // Boucle de compte à rebours
+    const winrate = totalGames > 0
+        ? Math.round((totalWins / totalGames) * 100)
+        : summary.winrate || 0;
 
-        return () => clearInterval(interval);
-    }, [puuid]);
+    const winrateColor = winrate >= 50 ? 'text-lol-win' : 'text-lol-loss';
 
-    const handleClick = () => {
-        if (cooldown > 0 || isSyncing) return;
-
-        // Verrouille l'action pour les 120 prochaines secondes
-        const lockUntil = Date.now() + 120 * 1000;
-        localStorage.setItem(`update_lock_${puuid}`, lockUntil);
-        setCooldown(120);
-
-        if (onUpdate) onUpdate();
-    };
-
+    // Ajout de shrink-0 sur la div principale pour interdire l'écrasement Flexbox
     return (
-        <button
-            onClick={handleClick}
-            disabled={cooldown > 0 || isSyncing}
-            className={`px-4 py-2 rounded font-bold text-xs uppercase tracking-wider transition-colors border
-                ${cooldown > 0 || isSyncing
-                    ? 'bg-gray-800 border-gray-600 text-gray-500 cursor-not-allowed'
-                    : 'bg-lol-blue border-lol-gold text-lol-gold hover:bg-lol-dark hover:text-white cursor-pointer shadow-[0_0_10px_rgba(200,170,110,0.15)]'}`}
-        >
-            {isSyncing ? 'Mise à jour...' : cooldown > 0 ? `Patientez ${cooldown}s` : 'Mettre à jour'}
-        </button>
+        <div className="glass-panel p-5 flex flex-col items-center relative overflow-hidden shrink-0">
+            <div className="relative mb-3">
+                <img
+                    src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/profileicon/${summary.profileIconId}.png`}
+                    alt="Profile"
+                    className="w-20 h-20 rounded-full border-2 border-border-strong shadow-glass"
+                />
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-surface-solid border border-border-glass text-lol-gold text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                    {summary.summonerLevel}
+                </div>
+            </div>
+
+            <h2 className="text-xl font-bold text-gray-100 text-center drop-shadow-md">
+                {summary.riotIdGameName}
+            </h2>
+            <div className="text-lol-textMuted text-xs mb-4 font-medium tracking-wide">
+                #{summary.riotIdTagline}
+            </div>
+
+            <div className="w-full bg-black/20 rounded-lg p-3 border border-border-glass shadow-inner mb-4 flex justify-around text-center">
+                <div>
+                    <div className="text-[10px] text-lol-textMuted uppercase tracking-wider font-bold mb-1">Parties</div>
+                    <div className="text-sm font-bold text-gray-200">{totalGames}</div>
+                </div>
+                <div>
+                    <div className="text-[10px] text-lol-textMuted uppercase tracking-wider font-bold mb-1">Winrate</div>
+                    <div className={`text-sm font-bold ${winrateColor}`}>{winrate}%</div>
+                </div>
+            </div>
+
+            <button
+                onClick={onUpdate}
+                disabled={isSyncing}
+                className="w-full py-2 bg-black/30 hover:bg-white/5 border border-border-glass rounded-lg text-xs font-bold text-lol-gold uppercase tracking-widest transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {isSyncing ? 'Mise à jour...' : 'Actualiser le profil'}
+            </button>
+        </div>
     );
 };
 
-export default UpdatePlayerButton;
+export default PlayerStatCard;

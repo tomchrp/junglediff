@@ -9,12 +9,10 @@
  * le backend (Data Dragon, ARQ polling) et orchestre le rendu des différentes
  * vues (Historique, Synergies, Assistant IA, et désormais Premier Clear).
  *
- * MODIFICATIONS :
- * - Remontée d'état (Lifting State Up) : L'état `activeTeam` (Bleu/Rouge) 
- * pour la vue Premier Clear est désormais géré ici et redescendu aux enfants.
- * - Liaison de `selectedChampion` à la requête `/jungle-paths` pour filtrer 
- * la carte en fonction du clic dans la Sidebar.
- * - Transmission du mode `isPremierClearMode` à la FilterBar.
+ * MODIFICATIONS RECENTES :
+ * - Étape 2 (Immersion) : Ajout du composant d'Ambilight en arrière-plan.
+ * Celui-ci réagit au champion sélectionné (selectedChampion) pour colorer 
+ * subtilement les orbes lumineux, ou se rabat sur une couleur or par défaut.
  * ============================================================================
  */
 
@@ -33,6 +31,26 @@ import { addProfileToHistory } from './services/historyService.js';
 import GlobalChampionsView from './components/global/GlobalChampionsView.jsx';
 import GlobalDuosView from './components/global/GlobalDuosView.jsx';
 import JunglePathingMap from './components/ui/JunglePathingMap.jsx';
+
+/**
+ * Dictionnaire basique de couleurs pour l'effet Ambilight (Background).
+ * Associe les identifiants textuels de Riot à une classe de couleur Tailwind stricte.
+ * L'effet étant fortement flouté et très peu opaque, on utilise des teintes sombres.
+ */
+const CHAMPION_COLORS = {
+  // Verts / Nature / Toxique
+  "Zac": "bg-green-800", "Maokai": "bg-green-900", "Ivern": "bg-lime-900", "Twitch": "bg-green-700", "Cassiopeia": "bg-emerald-800",
+  // Rouges / Sang / Feu
+  "Talon": "bg-red-900", "Zed": "bg-red-800", "Vladimir": "bg-red-900", "Brand": "bg-orange-700", "Annie": "bg-red-700",
+  // Bleus / Glace / Eau
+  "Nunu": "bg-blue-600", "Sejuani": "bg-cyan-800", "Lissandra": "bg-blue-800", "Fizz": "bg-blue-500", "Anivia": "bg-cyan-600",
+  // Violets / Néant / Magie Noire
+  "Evelynn": "bg-purple-900", "Syndra": "bg-purple-800", "Kassadin": "bg-purple-900", "Malzahar": "bg-fuchsia-900", "Belveth": "bg-indigo-900",
+  // Ombres / Gris
+  "Nocturne": "bg-gray-800", "Shaco": "bg-gray-700", "Viego": "bg-teal-900",
+  // Dorés / Lumière
+  "Azir": "bg-yellow-700", "Leona": "bg-yellow-600", "Lux": "bg-yellow-500", "Kayle": "bg-amber-600"
+};
 
 function App() {
   const { view: urlView, server: urlServer, riotId: urlRiotId } = useParams();
@@ -313,10 +331,29 @@ function App() {
     fetchJunglePaths();
   }, [currentMainView, currentPuuid, selectedChampion]);
 
-  return (
-    <div className="h-screen p-6 overflow-hidden flex flex-col">
-      <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1 min-h-0">
+  /**
+   * Détermination de la couleur de l'Ambilight.
+   * Si un champion est sélectionné, on cherche sa couleur dans le dictionnaire.
+   * Sinon, on applique la couleur dorée par défaut.
+   */
+  const activeChampName = selectedChampion ? championMap[selectedChampion] : null;
+  const ambilightColorClass = (activeChampName && CHAMPION_COLORS[activeChampName])
+    ? CHAMPION_COLORS[activeChampName]
+    : "bg-lol-gold";
 
+  return (
+    <div className="h-screen p-6 overflow-hidden flex flex-col relative z-0">
+
+      {/* NOUVEAU : Arrière-plan Ambilight (Glassmorphism Environment)
+        Création d'orbes lumineux diffus et animés qui réagissent au champion actif.
+        Isolés derrière l'application via -z-10.
+      */}
+      <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none flex items-center justify-center mix-blend-screen opacity-10">
+        <div className={`absolute w-[800px] h-[800px] rounded-full blur-3xl animate-ambient-drift ${ambilightColorClass} opacity-60`} />
+        <div className={`absolute w-[600px] h-[600px] rounded-full blur-3xl animate-ambient-pulse ${ambilightColorClass} opacity-40 delay-1000 translate-x-1/4 -translate-y-1/4`} />
+      </div>
+
+      <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1 min-h-0 z-10">
         <SearchBar isSyncing={isSyncing} />
 
         {errorMsg && (
@@ -338,6 +375,8 @@ function App() {
             <div className="w-80 shrink-0 flex flex-col gap-6 max-h-full">
               <PlayerStatCard
                 summary={playerSummary}
+                // CORRECTION : On passe les statistiques agrégées pour recalculer le winrate
+                championStats={championStats}
                 onUpdate={() => handleSearch(currentServer, playerSummary.riotIdGameName, playerSummary.riotIdTagline)}
                 isSyncing={isSyncing}
                 versionDDragon={versionDDragon}

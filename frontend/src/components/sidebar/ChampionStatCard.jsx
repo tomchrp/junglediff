@@ -5,9 +5,10 @@
  *
  * DESCRIPTION :
  * Affiche les statistiques résumées d'un champion spécifique dans la Sidebar.
- * Ce composant utilise le Design System pour sa structure (Glassmorphism),
- * et intègre désormais la primitive universelle <Avatar> pour garantir
- * le rognage parfait de la bordure noire de DataDragon et une harmonie totale.
+ * * MODIFICATIONS RECENTES :
+ * - CORRECTION : Remplacement de glass-panel-interactive par un fond sombre 
+ * (bg-black/20) pour respecter la règle du Nested Glassmorphism (pas de double 
+ * blur sur des éléments imbriqués).
  * ============================================================================
  */
 
@@ -15,13 +16,12 @@ import React from 'react';
 import Avatar from '../ui/Avatar.jsx';
 
 const ChampionStatCard = ({ championName, gamesPlayed, wins, winrate, isSelected, versionDDragon, onClick }) => {
-    // Application de la règle sémantique : Winrate >= 50% = Succès
     const winrateColor = winrate >= 50 ? 'text-lol-win' : 'text-lol-loss';
 
-    // Remplacement des couleurs en dur par les classes utilitaires du Design System
+    // Application stricte de la règle du "fond creusé" sans flou additionnel
     const cardStyle = isSelected
-        ? 'bg-surface-elevated border-lol-gold shadow-glow-gold'
-        : 'glass-panel-interactive';
+        ? 'bg-black/40 border-lol-gold shadow-[inset_0_0_10px_rgba(200,170,110,0.2)]'
+        : 'bg-black/20 border-border-glass hover:bg-white/5 hover:-translate-y-[1px]';
 
     return (
         <button

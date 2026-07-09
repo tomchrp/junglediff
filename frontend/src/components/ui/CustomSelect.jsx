@@ -5,14 +5,17 @@
  *
  * DESCRIPTION :
  * Primitive visuelle remplaçant la balise HTML <select> native.
- * Permet un stylisme 100% contrôlé (Glassmorphism, survol, états actifs)
- * impossible à réaliser de manière cross-browser avec des <option> standards.
+ * * MODIFICATIONS RECENTES :
+ * - CORRECTION UI : Suppression de la classe `min-w-[160px]` qui forçait un 
+ * dépassement horizontal (overflow) lorsque le composant était utilisé dans 
+ * un espace restreint comme la SearchBar, ce qui le faisait empiéter sur 
+ * les autres éléments.
  * ============================================================================
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-export default function CustomSelect({ value, options, onChange, placeholder = "Sélectionner..." }) {
+export default function CustomSelect({ value, options, onChange, placeholder = "Sélectionner...", buttonClassName = "h-7" }) {
     const [isOpen, setIsOpen] = useState(false);
     const selectRef = useRef(null);
 
@@ -30,24 +33,22 @@ export default function CustomSelect({ value, options, onChange, placeholder = "
     const selectedOption = options.find(opt => opt.value === value);
 
     return (
-        <div className="relative" ref={selectRef}>
-            {/* BOUTON DÉCLENCHEUR */}
+        <div className="relative w-full" ref={selectRef}>
+            {/* BOUTON DÉCLENCHEUR (Style Cavité) */}
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                // Modification ici : ajout de h-7, suppression de py-1.5, passage en text-xs
-                className={`flex items-center justify-between w-full min-w-[160px] h-7 bg-surface-solid text-gray-100 px-3 outline-none border rounded-md cursor-pointer text-xs transition-all duration-200 ${isOpen ? 'border-lol-gold shadow-glow-gold' : 'border-border-strong hover:border-gray-400'}`}
+                className={`flex items-center justify-between w-full bg-black/20 shadow-inner text-gray-100 px-3 outline-none border rounded-md cursor-pointer text-xs transition-all duration-200 ${isOpen ? 'border-lol-gold bg-black/40' : 'border-border-glass hover:bg-white/5'} ${buttonClassName}`}
             >
                 <span className="truncate pr-2 font-medium">
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
-                {/* Légère réduction du chevron pour s'adapter aux 28px de hauteur */}
-                <ChevronDown className={`w-3.5 h-3.5 text-lol-textMuted transition-transform duration-200 ${isOpen ? 'rotate-180 text-lol-gold' : ''}`} />
+                <ChevronDown className={`w-3.5 h-3.5 text-lol-textMuted shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-lol-gold' : ''}`} />
             </button>
 
-            {/* MENU DÉROULANT (GLASSMORPHISM) */}
+            {/* MENU DÉROULANT (Style Vitre) */}
             {isOpen && (
-                <div className="absolute top-full left-0 mt-2 w-full bg-surface-elevated backdrop-blur-md border border-border-strong rounded-md shadow-glass z-50 max-h-60 overflow-y-auto custom-scrollbar overflow-x-hidden">
+                <div className="absolute top-full left-0 mt-2 w-full min-w-max bg-surface/90 backdrop-blur-xl border border-border-glass rounded-md shadow-glass z-50 max-h-60 overflow-y-auto custom-scrollbar overflow-x-hidden">
                     <div className="py-1">
                         {options.map((opt) => {
                             const isSelected = opt.value === value;
@@ -59,8 +60,8 @@ export default function CustomSelect({ value, options, onChange, placeholder = "
                                         setIsOpen(false);
                                     }}
                                     className={`px-3 py-2 text-sm cursor-pointer transition-colors flex items-center ${isSelected
-                                        ? 'bg-lol-gold/10 text-lol-gold font-bold border-l-2 border-lol-gold'
-                                        : 'text-gray-200 hover:bg-surface-solid border-l-2 border-transparent hover:border-gray-500'
+                                        ? 'bg-black/30 text-lol-gold font-bold shadow-inner border-l-2 border-lol-gold'
+                                        : 'text-gray-200 hover:bg-white/5 border-l-2 border-transparent'
                                         }`}
                                 >
                                     {opt.label}

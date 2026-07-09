@@ -5,6 +5,13 @@
  *
  * DESCRIPTION :
  * Point d'entrée des styles de l'application.
+ * * MODIFICATIONS (Étape 1 - Fondations Visuelles) :
+ * - Renforcement de l'effet "Vitre" (.glass-panel) avec une opacité de 
+ * bordure simulée par l'ombre interne (configurée dans Tailwind).
+ * - Amélioration du Feedback de .glass-panel-interactive avec transformation
+ * sur l'axe Y et accentuation du flou et de la lumière.
+ * - Ajout d'une classe .animate-shimmer-wrapper pour encapsuler le futur
+ * loader vitreux.
  * ============================================================================
  */
 
@@ -15,7 +22,7 @@
 @layer base {
   body {
     @apply bg-app text-gray-200 antialiased;
-    /* Remplacement du halo bleu par un halo gris/blanc très faible (opacité 3%) */
+    /* Maintien du halo originel très léger en plus des futurs orbes d'arrière-plan */
     background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.03) 0%, rgba(5, 5, 5, 1) 60%);
     background-attachment: fixed;
   }
@@ -36,14 +43,39 @@
 }
 
 @layer components {
+
+  /* * Composant Primitif : Panneau de Verre 
+   * Le reflet supérieur est désormais géré par shadow-glass (inset)
+   */
   .glass-panel {
-    @apply bg-surface backdrop-blur-md border border-border-glass shadow-glass rounded-xl;
+    @apply bg-surface backdrop-blur-xl border border-border-glass shadow-glass rounded-xl;
   }
 
+  /* * Déclinaison Interactive : Feedback physique au survol 
+   * Soulèvement de 2px, augmentation de l'ombre portée et du reflet interne
+   */
   .glass-panel-interactive {
-    @apply glass-panel transition-all duration-200 ease-in-out hover:bg-surface-elevated hover:border-border-strong cursor-pointer;
+    @apply glass-panel transition-all duration-200 ease-out cursor-pointer;
   }
 
+  .glass-panel-interactive:hover {
+    @apply bg-surface-elevated border-border-strong shadow-glass-elevated -translate-y-[2px];
+  }
+
+  /* * Classe utilitaire pour les skeletons organiques (chargements)
+   * Crée un masque avec un dégradé glissant par-dessus l'élément
+   */
+  .shimmer-wrapper {
+    @apply relative overflow-hidden bg-surface-solid border border-border-glass rounded-xl;
+  }
+
+  .shimmer-wrapper::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent z-10;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Esthétique de la barre de défilement (inchangée, déjà adaptée au thème) */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
