@@ -1,5 +1,3 @@
-# backend/app/services/crawler_service.py
-
 """
 ===============================================================================
 FICHIER : backend/app/services/crawler_service.py
@@ -9,13 +7,13 @@ DESCRIPTION :
 Moteur autonome d'ingestion massive (Big Data). 
 Orchestre l'extraction des données Riot en respectant les quotas (Rate Limit).
 
-MODIFICATIONS (PHASE 4 BIG DATA & MINIO) :
-- Remplacement du mode binaire (extraction_only) par la machine à 3 états 
-  (DISCOVERY_AND_DETAILS, DETAILS_ONLY, TIMELINES_ONLY).
-- Sécurisation Absolute Cold Storage : Toute donnée API Riot est envoyée à 
-  MinIO (StorageService) AVANT le passage dans le DataTrimmer.
-- Implémentation du mode "Rattrapage" (_process_timeline_backfill) pour 
-  peupler l'ingénierie analytique (Golds/XP à 15min) sur l'historique existant.
+MODIFICATIONS (CORRECTION MÉTRIQUES AVANCÉES) :
+- Refonte de la fonction _update_aggregated_metric pour supporter les
+  dictionnaires imbriqués (sous-clés).
+- Extraction de l'ID de file (queueId) lors du trimming pour incrémenter
+  les statistiques précises par type de partie (SoloQ, Flex, Draft).
+- Extraction du Tier lors de la traduction Summoner pour cartographier
+  la répartition de la base de joueurs par division.
 ===============================================================================
 """
 
@@ -26,9 +24,11 @@ from typing import Optional
 from sqlalchemy import select, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import settings
-from app.db.models import CrawlerState, CrawlerQueue, CrawlerMatchQueue, Match, Player, MatchParticipant, MatchTimeline
+from app.db.models import (CrawlerState, CrawlerQueue, CrawlerMatchQueue, Match, 
+                           Player, MatchParticipant, MatchTimeline, CrawlerSummonerQueue)
 from app.services.riot_client import RiotClient
 from app.services.trimmer import DataTrimmer
 from app.services.storage_service import StorageService
@@ -46,9 +46,9 @@ class CrawlerService:
         result = await self.db.execute(query)
         state = result.scalar_one_or_none()
         if state:
-            await self.db.refresh(state) # Force le rechargement depuis la DB
+            await self.db.refresh(state)
         else:
-            state = CrawlerState(id=1, is_active=False, crawler_mode="DISCOVERY_AND_DETAILS", total_requests_made=0)
+            state = CrawlerState(id=1, is_active=False, crawler_mode="DISCOVERY_AND_DETAILS", total_requests_made=0, aggregated_metrics={})
             self.db.add(state)
             await self.db.commit()
             await self.db.refresh(state)
@@ -63,9 +63,6 @@ class CrawlerService:
         return state
 
     async def set_crawler_mode(self, mode: str) -> CrawlerState:
-        """
-        Remplace toggle_extraction_only. Pilote la vitesse d'ingestion.
-        """
         valid_modes = ["DISCOVERY_AND_DETAILS", "DETAILS_ONLY", "TIMELINES_ONLY"]
         if mode not in valid_modes:
             raise ValueError(f"Mode invalide. Choix acceptés : {valid_modes}")
@@ -76,30 +73,106 @@ class CrawlerService:
         return state
 
     async def seed_crawler(self, puuid: str) -> None:
-        """Injecte ou force la réinitialisation d'une graine avec une requête SQL brute."""
         current_time = int(time.time() * 1000)
-        
-        # Vérifie si le joueur existe dans la file
-        query = select(CrawlerQueue).where(CrawlerQueue.puuid == puuid)
-        result = await self.db.execute(query)
-        existing_seed = result.scalar_one_or_none()
-        
-        if not existing_seed:
-            seed = CrawlerQueue(puuid=puuid, status="PENDING", discovery_depth=0, discovered_at=current_time)
-            self.db.add(seed)
-        else:
-            # Forçage SQL strict pour garantir la mise à jour (contourne le cache ORM)
-            await self.db.execute(
-                update(CrawlerQueue)
-                .where(CrawlerQueue.puuid == puuid)
-                .values(status="PENDING", discovery_depth=0, discovered_at=current_time)
-            )
+        stmt = insert(CrawlerQueue).values(
+            puuid=puuid, 
+            status="PENDING", 
+            discovery_depth=0, 
+            discovered_at=current_time
+        ).on_conflict_do_update(
+            index_elements=['puuid'],
+            set_=dict(status="PENDING", discovery_depth=0, discovered_at=current_time)
+        )
+        await self.db.execute(stmt)
         await self.db.commit()
+
+    async def purge_queues(self) -> None:
+        await self.db.execute(text("TRUNCATE TABLE crawler_queue, crawler_match_queue, crawler_summoner_queue RESTART IDENTITY"))
+        state = await self.get_or_create_state()
+        state.aggregated_metrics = {}
+        await self.db.commit()
+
+    async def _update_aggregated_metric(self, category: str, subkey: str = None, increment: int = 1) -> None:
+        """
+        Met à jour le compteur JSON en base de manière transactionnelle.
+        Intègre un système d'auto-guérison : si le type de la donnée en base
+        est détecté comme corrompu, il est automatiquement réinitialisé.
+        """
+        state = await self.get_or_create_state()
+        metrics = dict(state.aggregated_metrics) if state.aggregated_metrics else {}
+        
+        if subkey:
+            if category not in metrics or not isinstance(metrics[category], dict):
+                metrics[category] = {} # Auto-guérison
+            metrics[category][subkey] = metrics[category].get(subkey, 0) + increment
+        else:
+            if category in metrics and not isinstance(metrics[category], int):
+                metrics[category] = 0 # Auto-guérison
+            metrics[category] = metrics.get(category, 0) + increment
+            
+        state.aggregated_metrics = metrics
+        self.db.add(state)
+
+    async def process_next_summoner(self) -> Optional[str]:
+        state = await self.get_or_create_state()
+        if not state.is_active or state.crawler_mode == "TIMELINES_ONLY": 
+            return None
+
+        query = text("SELECT summoner_id, tier, rank FROM crawler_summoner_queue WHERE status = 'PENDING' ORDER BY discovered_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED")
+        result = await self.db.execute(query)
+        row = result.fetchone()
+        if not row: return None
+
+        s_id, tier, rank = row[0], row[1], row[2]
+        
+        await self.db.execute(update(CrawlerSummonerQueue).where(CrawlerSummonerQueue.summoner_id == s_id).values(status="PROCESSING"))
+        await self.db.commit()
+
+        try:
+            routing = self.client.get_routing("EUW")
+            summoner_data = await self.client.get_summoner_by_id(routing["platform"], s_id)
+            state.total_requests_made += 1
+            
+            if summoner_data and "puuid" in summoner_data:
+                puuid = summoner_data["puuid"]
+                current_time = int(time.time() * 1000)
+
+                stmt_player = insert(Player).values(
+                    puuid=puuid,
+                    summoner_id=s_id,
+                    riot_id_name="Unknown", 
+                    riot_id_tagline="UNK",
+                    tier=tier,
+                    rank=rank
+                ).on_conflict_do_nothing(index_elements=['puuid'])
+                await self.db.execute(stmt_player)
+
+                stmt_queue = insert(CrawlerQueue).values(
+                    puuid=puuid,
+                    status="PENDING",
+                    discovery_depth=1,
+                    discovered_at=current_time
+                ).on_conflict_do_nothing(index_elements=['puuid'])
+                await self.db.execute(stmt_queue)
+                
+                await self._update_aggregated_metric('summoners_translated')
+                # NOUVEAU : Incrémentation du compteur par division
+                await self._update_aggregated_metric('players_by_tier', tier)
+
+            await self.db.execute(update(CrawlerSummonerQueue).where(CrawlerSummonerQueue.summoner_id == s_id).values(status="COMPLETED"))
+            await self.db.commit()
+            return puuid
+
+        except Exception as e:
+            logger.error(f"Crawler Summoner Translation Error ({s_id}): {e}")
+            await self.db.execute(update(CrawlerSummonerQueue).where(CrawlerSummonerQueue.summoner_id == s_id).values(status="FAILED"))
+            await self.db.commit()
+            return None
 
     async def process_next_player(self) -> Optional[str]:
         """
-        Explore le profil d'un joueur pour récupérer ses Match IDs.
-        Ignoré si le crawler est en mode rattrapage de Timelines.
+        Dépile la file de joueurs et récupère leur historique de matchs (Match-V5).
+        Filtre strictement les identifiants pour ignorer TR1, EUN1, ou RU.
         """
         state = await self.get_or_create_state()
         if not state.is_active or state.crawler_mode == "TIMELINES_ONLY": 
@@ -116,35 +189,27 @@ class CrawlerService:
 
         try:
             routing = self.client.get_routing("EUW")
-            
-            # TRIPLE APPEL (Ciblage strict : Draft, SoloQ, Flex)
             api_tasks = [
                 self.client.get_match_ids(routing["continent"], target_puuid, queue=420, count=20),
-                self.client.get_match_ids(routing["continent"], target_puuid, queue=440, count=20),
-                self.client.get_match_ids(routing["continent"], target_puuid, queue=400, count=20)
+                self.client.get_match_ids(routing["continent"], target_puuid, queue=440, count=20)
             ]
             
             lists_of_ids = await asyncio.gather(*api_tasks, return_exceptions=True)
-            state.total_requests_made += 3
+            state.total_requests_made += 2
             
-            # Fusion et dédoublonnage
             all_fetched_ids = set()
             for l in lists_of_ids:
                 if isinstance(l, list):
-                    all_fetched_ids.update(l)
+                    # FILTRE STRICT : On ignore la pollution continentale de Riot
+                    filtered = [m_id for m_id in l if m_id.startswith("EUW1_")]
+                    all_fetched_ids.update(filtered)
                     
-            match_ids = list(all_fetched_ids)
-
-            if match_ids:
+            if all_fetched_ids:
                 current_time = int(time.time() * 1000)
-                for m_id in match_ids:
-                    try:
-                        self.db.add(CrawlerMatchQueue(match_id=m_id, status="PENDING", discovered_at=current_time))
-                        await self.db.commit()
-                    except IntegrityError:
-                        await self.db.rollback() 
-                        await self.db.execute(update(CrawlerMatchQueue).where(CrawlerMatchQueue.match_id == m_id).values(status="PENDING"))
-                        await self.db.commit()
+                matches_to_insert = [{"match_id": m_id, "status": "PENDING", "discovered_at": current_time} for m_id in all_fetched_ids]
+                
+                stmt = insert(CrawlerMatchQueue).values(matches_to_insert).on_conflict_do_nothing(index_elements=['match_id'])
+                await self.db.execute(stmt)
 
             await self.db.execute(update(CrawlerQueue).where(CrawlerQueue.puuid == target_puuid).values(status="COMPLETED"))
             await self.db.commit()
@@ -156,30 +221,16 @@ class CrawlerService:
             await self.db.commit()
             return None
 
-    async def purge_queues(self) -> None:
-        """Vide entièrement les files d'attente pour repartir sur une base saine."""
-        await self.db.execute(text("TRUNCATE TABLE crawler_queue, crawler_match_queue RESTART IDENTITY"))
-        await self.db.commit()
-
-
     async def process_next_match(self) -> Optional[str]:
-        """Aiguilleur principal de la donnée de match selon le mode actif."""
         state = await self.get_or_create_state()
         if not state.is_active: return None
-
-        logger.info(f"DEBUG - Mode Crawler Actif: {state.crawler_mode}")
 
         if state.crawler_mode == "TIMELINES_ONLY":
             return await self._process_timeline_backfill(state)
         else:
             return await self._process_details_ingestion(state)
 
-
     async def _process_timeline_backfill(self, state: CrawlerState) -> Optional[str]:
-        """
-        Nouveau Mode : Scanne la base à la recherche de matchs orphelins de timeline.
-        Télécharge, extrait l'économie à 15 minutes, et met à jour le modèle relationnel.
-        """
         query = text("SELECT match_id FROM matches WHERE is_crawled = true AND timeline_status = 'PENDING' LIMIT 1 FOR UPDATE SKIP LOCKED")
         result = await self.db.execute(query)
         row = result.fetchone()
@@ -193,45 +244,25 @@ class CrawlerService:
             state.total_requests_made += 1
 
             if not timeline_data:
-                # SÉCURITÉ 404 RIOT
                 await self.db.execute(update(Match).where(Match.match_id == target_match_id).values(timeline_status="UNAVAILABLE"))
                 await self.db.commit()
                 return f"{target_match_id} (TIMELINES_ONLY - 404 UNAVAILABLE)"
 
-            # INJECTION COLD STORAGE
             await self.storage.upload_json(target_match_id, "timeline", timeline_data)
-            
-            # ELAGAGE
             trimmed_timeline = DataTrimmer.trim_match_timeline(timeline_data)
 
-            # EXTRACTION DES STATS 15 MIN
-            match_result = await self.db.execute(select(Match).where(Match.match_id == target_match_id))
-            match_record = match_result.scalar_one_or_none()
-
-            metrics_dict = {}
-            if match_record and match_record.raw_match_data:
-                metrics_dict = DataTrimmer.extract_timeline_metrics(match_record.raw_match_data, trimmed_timeline)
-
-            # INJECTION WARM STORAGE
             new_timeline = MatchTimeline(match_id=target_match_id, raw_timeline_data=trimmed_timeline)
             self.db.add(new_timeline)
 
-            # MISE À JOUR HOT STORAGE (Métriques)
-            if metrics_dict:
-                for puuid, m in metrics_dict.items():
-                    await self.db.execute(
-                        update(MatchParticipant)
-                        .where(MatchParticipant.match_id == target_match_id)
-                        .where(MatchParticipant.puuid == puuid)
-                        .values(
-                            gold_diff_15m=m.get("gold_diff_15m"),
-                            xp_diff_15m=m.get("xp_diff_15m"),
-                            is_snowballing=m.get("is_snowballing")
-                        )
-                    )
-
-            # FERMETURE DU CIRCUIT
             await self.db.execute(update(Match).where(Match.match_id == target_match_id).values(timeline_status="FETCHED"))
+            
+            # Récupération contextuelle de l'ID de la file pour les métriques
+            match_result = await self.db.execute(select(Match).where(Match.match_id == target_match_id))
+            match_record = match_result.scalar_one_or_none()
+            queue_id = str(match_record.raw_match_data.get("info", {}).get("queueId", "unknown")) if match_record and match_record.raw_match_data else "unknown"
+
+            await self._update_aggregated_metric('timelines_crawled')
+            await self._update_aggregated_metric('timelines_by_queue', queue_id)
             await self.db.commit()
             
             return f"{target_match_id} (TIMELINES_ONLY - SUCCESS)"
@@ -241,9 +272,7 @@ class CrawlerService:
             await self.db.rollback()
             return None
 
-
     async def _process_details_ingestion(self, state: CrawlerState) -> Optional[str]:
-        """Mode historique : Dépile la CrawlerMatchQueue et ingère la structure de base."""
         query = text("SELECT match_id FROM crawler_match_queue WHERE status = 'PENDING' ORDER BY discovered_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED")
         result = await self.db.execute(query)
         row = result.fetchone()
@@ -268,13 +297,11 @@ class CrawlerService:
                 if not raw_match or "info" not in raw_match:
                     raise ValueError("Payload Match Details invalide")
 
-                # INJECTION COLD STORAGE STRICTE
                 await self.storage.upload_json(target_match_id, "details", raw_match)
 
                 trimmer = DataTrimmer()
                 trimmed_match = trimmer.trim_match_details(raw_match)
                 
-                # INJECTION WARM STORAGE
                 new_db_match = Match(
                     match_id=target_match_id,
                     game_version=trimmed_match["info"].get("gameVersion", "unknown"),
@@ -282,54 +309,66 @@ class CrawlerService:
                     creation_timestamp=trimmed_match["info"].get("gameCreation", 0),
                     is_crawled=True,
                     raw_match_data=trimmed_match,
-                    timeline_status="PENDING" # Préparation pour le backfill futur
+                    timeline_status="PENDING" 
                 )
                 self.db.add(new_db_match)
 
             current_time = int(time.time() * 1000)
             participants = trimmed_match.get("info", {}).get("participants", [])
+            queue_id = str(trimmed_match.get("info", {}).get("queueId", "unknown"))
+            
+            players_to_insert = []
+            crawlers_to_insert = []
+            match_participants_to_insert = []
             
             for participant in participants:
                 p_puuid = participant.get("puuid")
                 if not p_puuid: continue
 
-                # 1. Joueur Global
-                player_exist = await self.db.execute(select(Player.puuid).where(Player.puuid == p_puuid))
-                is_new_player = not player_exist.scalar_one_or_none()
-
-                if is_new_player:
-                    new_player = Player(
-                        puuid=p_puuid,
-                        riot_id_name=participant.get("riotIdGameName", "Unknown"),
-                        riot_id_tagline=participant.get("riotIdTagline", "UNK")
-                    )
-                    self.db.add(new_player)
+                players_to_insert.append({
+                    "puuid": p_puuid,
+                    "riot_id_name": participant.get("riotIdGameName", "Unknown"),
+                    "riot_id_tagline": participant.get("riotIdTagline", "UNK")
+                })
                     
-                # 2. Snowballing exclusif au mode DISCOVERY
                 if state.crawler_mode == "DISCOVERY_AND_DETAILS":
-                    queue_exist = await self.db.execute(select(CrawlerQueue.puuid).where(CrawlerQueue.puuid == p_puuid))
-                    if not queue_exist.scalar_one_or_none():
-                        self.db.add(CrawlerQueue(puuid=p_puuid, status="PENDING", discovery_depth=1, discovered_at=current_time))
+                    crawlers_to_insert.append({
+                        "puuid": p_puuid,
+                        "status": "PENDING",
+                        "discovery_depth": 1,
+                        "discovered_at": current_time
+                    })
 
-                # 3. Injection Hot Storage
-                mp_exist = await self.db.execute(select(MatchParticipant.id).where(MatchParticipant.match_id == target_match_id).where(MatchParticipant.puuid == p_puuid))
-                if not mp_exist.scalar_one_or_none():
-                    new_mp = MatchParticipant(
-                        match_id=target_match_id,
-                        puuid=p_puuid,
-                        team_id=participant.get("teamId", 0),
-                        champion_id=participant.get("championId", 0),
-                        # CIBLAGE API MATCH-V5 : On injecte la vraie position dans l'unique colonne 'lane'
-                        lane=participant.get("teamPosition", "NONE"),
-                        win=participant.get("win", False),
-                        kills=participant.get("kills", 0),
-                        deaths=participant.get("deaths", 0),
-                        assists=participant.get("assists", 0)
-                    )
-                    self.db.add(new_mp)
+                match_participants_to_insert.append({
+                    "match_id": target_match_id,
+                    "puuid": p_puuid,
+                    "team_id": participant.get("teamId", 0),
+                    "champion_id": participant.get("championId", 0),
+                    "lane": participant.get("teamPosition", "NONE"),
+                    "win": participant.get("win", False),
+                    "kills": participant.get("kills", 0),
+                    "deaths": participant.get("deaths", 0),
+                    "assists": participant.get("assists", 0)
+                })
 
-            await self.db.commit()
+            if players_to_insert:
+                stmt_p = insert(Player).values(players_to_insert).on_conflict_do_nothing(index_elements=['puuid'])
+                await self.db.execute(stmt_p)
+                
+            if crawlers_to_insert:
+                stmt_c = insert(CrawlerQueue).values(crawlers_to_insert).on_conflict_do_nothing(index_elements=['puuid'])
+                await self.db.execute(stmt_c)
+                
+            if match_participants_to_insert:
+                stmt_mp = insert(MatchParticipant).values(match_participants_to_insert).on_conflict_do_nothing(index_elements=['match_id', 'puuid'])
+                await self.db.execute(stmt_mp)
+
             await self.db.execute(update(CrawlerMatchQueue).where(CrawlerMatchQueue.match_id == target_match_id).values(status="COMPLETED"))
+            
+            if not existing_match_data:
+                await self._update_aggregated_metric('details_crawled', 1)
+                await self._update_aggregated_metric('details_by_queue', queue_id)
+                
             await self.db.commit()
             
             return f"{target_match_id} ({'Tremplin Local' if existing_match_data else 'API Fetch'})"

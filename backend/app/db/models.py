@@ -8,15 +8,13 @@ Définition du schéma relationnel de la base de données via SQLAlchemy.
 Inclut les métadonnées globales des joueurs, le stockage hybride des matchs,
 et les nouvelles tables de persistance pour l'orchestration du Crawler Big Data.
 
-MODIFICATIONS :
-- Ajout de la colonne `is_crawled` dans la table Match pour empêcher
-  le téléchargement automatisé des timelines sur les données massives.
-- Création de `CrawlerQueue` : File d'attente des joueurs à explorer (Snowball).
-- Création de `CrawlerMatchQueue` : File d'attente des matchs à télécharger.
-- Création de `CrawlerState` : Singleton pour le pilotage (Start/Stop) et 
-  le monitoring en temps réel.
-- REFACTO BIG DATA : Ajout metrics 15m (MatchParticipant), timeline_status (Match),
-  et crawler_mode (CrawlerState) remplaçant extraction_only.
+MODIFICATIONS (PHASE 1 - OPTIMISATION BIG DATA) :
+- Ajout de `details_version` et `timeline_version` dans la table Match pour 
+  garantir l'idempotence absolue des scripts de backfill.
+- Ajout de `aggregated_metrics` (JSONB) dans CrawlerState pour stocker les 
+  compteurs en temps réel et tuer les requêtes COUNT(*) du dashboard.
+- Création de `CrawlerSummonerQueue` : File d'attente d'atténuation du Rate Limit
+  dédiée à la traduction asynchrone des SummonerId (League-V4) en PUUID.
 ===============================================================================
 """
 
@@ -71,8 +69,12 @@ class Match(Base):
     # FLAG DE SÉCURITÉ BIG DATA
     is_crawled = Column(Boolean, nullable=False, server_default='false', default=False)
     
-    # NOUVEAU FLAG DE RÉSOLUTION TIMELINE (Protection contre les 404 de Riot)
+    # FLAG DE RÉSOLUTION TIMELINE (Protection contre les 404 de Riot)
     timeline_status = Column(String, nullable=False, server_default='PENDING', default='PENDING')
+    
+    # VERSIONNING BACKFILL (Garantit l'idempotence des passages de scripts)
+    details_version = Column(Integer, nullable=False, server_default='0', default=0)
+    timeline_version = Column(Integer, nullable=False, server_default='0', default=0)
     
     # Données froides TRIMMÉES
     raw_match_data = Column(JSONB, nullable=False)
@@ -97,12 +99,12 @@ class MatchParticipant(Base):
     deaths = Column(Integer, nullable=False)
     assists = Column(Integer, nullable=False)
 
-    # NOUVELLES MÉTRIQUES BIG DATA (Calculées au passage du Trimmer)
+    # MÉTRIQUES BIG DATA (Calculées au passage du Trimmer)
     gold_diff_15m = Column(Integer, nullable=True)
     xp_diff_15m = Column(Integer, nullable=True)
     is_snowballing = Column(Boolean, nullable=True)
 
-    # NOUVELLES MÉTRIQUES SPATIALES (Jungle Pathing - Minutes 1, 2 et 3)
+    # MÉTRIQUES SPATIALES (Jungle Pathing - Minutes 1, 2 et 3)
     pos_f1_x = Column(Integer, nullable=True)
     pos_f1_y = Column(Integer, nullable=True)
     pos_f2_x = Column(Integer, nullable=True)
@@ -133,6 +135,20 @@ class MatchTimeline(Base):
 # MODÈLES D'ÉTAT DU CRAWLER BIG DATA
 # =============================================================================
 
+class CrawlerSummonerQueue(Base):
+    """
+    File d'attente persistante pour la traduction des Summoner IDs en PUUIDs (League-V4 -> Summoner-V4).
+    Absorbe le choc du Rate Limit de l'API Riot lors du Snowballing de masse par division.
+    """
+    __tablename__ = "crawler_summoner_queue"
+    
+    summoner_id = Column(String, primary_key=True, index=True)
+    tier = Column(String, nullable=False) # Ex: DIAMOND
+    rank = Column(String, nullable=False) # Ex: II
+    status = Column(String, nullable=False, default="PENDING", index=True) # PENDING, PROCESSING, COMPLETED, FAILED
+    discovered_at = Column(BigInteger, nullable=False)
+
+
 class CrawlerQueue(Base):
     """
     File d'attente persistante des joueurs découverts.
@@ -161,52 +177,42 @@ class CrawlerMatchQueue(Base):
 class CrawlerState(Base):
     """
     Table de type Singleton (Une seule ligne, id=1).
-    Sert de panneau de contrôle central pour allumer/éteindre le crawler depuis
-    le frontend, et de registre pour calculer la vitesse d'ingestion.
+    Panneau de contrôle central et stockage des compteurs de télémétrie pré-calculés.
     """
     __tablename__ = "crawler_state"
     
     id = Column(Integer, primary_key=True) # Toujours 1
     is_active = Column(Boolean, nullable=False, default=False)
     
-    # Remplacement de extraction_only par un mode à 3 états :
-    # DISCOVERY_AND_DETAILS, DETAILS_ONLY, TIMELINES_ONLY
     crawler_mode = Column(String, nullable=False, default="DISCOVERY_AND_DETAILS")
     
     total_requests_made = Column(Integer, nullable=False, default=0)
     current_rate_limit_sleep = Column(Integer, nullable=False, default=0)
     started_at = Column(BigInteger, nullable=True)
+    
+    # COMPTEURS AGRÉGÉS BIG DATA
+    # Stocke sous format JSON : {"details_crawled": 0, "timelines_crawled": 0, "queues": {"420": 0}}
+    aggregated_metrics = Column(JSONB, nullable=False, server_default='{}', default=dict)
+
+# =============================================================================
+# VUES MATÉRIALISÉES
+# =============================================================================
 
 class MVCommunityMatchups(Base):
-    """
-    Vue matérialisée d'agrégation analytique (Data Mart).
-    Calcule le taux de victoire croisé des affrontements (Joueur A VS Joueur B)
-    par tranches de 5 minutes.
-    
-    Bien qu'il s'agisse d'une vue, SQLAlchemy exige la déclaration de Primary Keys
-    pour reconstituer les objets uniques.
-    """
     __tablename__ = "mv_community_matchups"
     __table_args__ = {'info': dict(is_view=True)}
 
-    # Clé primaire composite virtuelle dictée par l'indexation de la vue
     subject_champion_id = Column(Integer, primary_key=True)
     subject_lane = Column(String, primary_key=True)
     target_champion_id = Column(Integer, primary_key=True)
     target_lane = Column(String, primary_key=True)
     duration_bucket = Column(Integer, primary_key=True) 
 
-    # Métriques précalculées par PostgreSQL
     matches_count = Column(Integer, nullable=False)
     wins_count = Column(Integer, nullable=False)
 
 
 class MVCommunitySynergies(Base):
-    """
-    Vue matérialisée d'agrégation analytique (Data Mart).
-    Calcule le taux de victoire croisé des coopérations (Joueur A AVEC Joueur B)
-    par tranches de 5 minutes.
-    """
     __tablename__ = "mv_community_synergies"
     __table_args__ = {'info': dict(is_view=True)}
 

@@ -6,11 +6,12 @@ PROJET  : JungleDiff
 DESCRIPTION :
 Point d'entrée autonome (Worker) pour le Crawler Big Data.
 Ce script s'exécute en boucle infinie. Il agit comme un consommateur
-sur les files d'attente PostgreSQL (CrawlerQueue et CrawlerMatchQueue).
-Il lit le statut global (is_active) pour se mettre en pause instantanément
-si l'utilisateur l'exige via l'API.
-Il implémente une interception des signaux système (SIGINT/SIGTERM) pour
-garantir un arrêt gracieux sans corrompre les transactions en cours.
+sur les files d'attente PostgreSQL.
+
+MODIFICATIONS (PHASE 2 - BATCH & UPSERT) :
+- Ajout de la priorité sur la nouvelle file CrawlerSummonerQueue (Rate Limit pondéré).
+- Le worker vérifie s'il doit traduire un Summoner, avec une fréquence
+  volontairement abaissée pour privilégier la donnée de jeu pure.
 ===============================================================================
 """
 
@@ -20,7 +21,6 @@ import signal
 import sys
 import os
 
-# Ajout du chemin racine au PYTHONPATH pour permettre les imports absolus
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,36 +38,19 @@ class CrawlerWorker:
         self.shutdown_event = asyncio.Event()
 
     def _signal_handler(self, sig, frame):
-        """
-        Intercepte les signaux d'arrêt du système d'exploitation (ex: Ctrl+C, docker stop).
-        Au lieu de tuer le processus brutalement, déclenche l'événement de fermeture
-        pour permettre à la boucle principale de terminer proprement la transaction
-        SQL en cours (commit ou rollback) et de libérer les verrous (SKIP LOCKED).
-        """
+        """Fermeture gracieuse : autorise le commit transactionnel en cours."""
         logger.info("\nSignal d'arrêt reçu. Fermeture gracieuse en cours (fin de la transaction actuelle)...")
         self.shutdown_event.set()
 
     async def run(self):
-        """
-        Boucle d'exécution principale du worker asynchrone.
-        
-        Logique de priorité :
-        1. Vérifie si l'arrêt a été demandé par le système.
-        2. Récupère une session de base de données fraîche via AsyncSessionLocal.
-        3. Initialise le service et vérifie si l'application autorise le crawling (is_active).
-        4. Si en pause, le worker dort pendant 5 secondes pour économiser le CPU.
-        5. Si actif, il priorise le traitement des Matchs (process_next_match) pour vider la file.
-        6. Si aucun Match n'est en attente, il tente de traiter un Joueur (process_next_player).
-        7. Si les deux files sont vides, il dort en attendant l'injection d'une nouvelle graine.
-        """
-        # Attachement des signaux systèmes pour l'arrêt gracieux
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
         logger.info("Démarrage du Worker Crawler Big Data...")
+        
+        loop_counter = 0
 
         while not self.shutdown_event.is_set():
-            # Utilisation de la session asynchrone correcte
             async with AsyncSessionLocal() as db:
                 service = CrawlerService(db)
                 
@@ -75,31 +58,38 @@ class CrawlerWorker:
                     state = await service.get_or_create_state()
                     
                     if not state.is_active:
-                        # Le crawler est en pause via l'API/Frontend
                         await asyncio.sleep(5)
                         continue
 
-                    # Priorité 1 : Traiter les matchs en attente (réduit la taille de la file)
+                    # PRIORITÉ 1 : Dépiler les Matchs (La cible finale)
                     processed_match = await service.process_next_match()
                     if processed_match:
                         logger.info(f"Match ingéré avec succès : {processed_match}")
-                        # On reboucle immédiatement sans pause pour maximiser le débit
+                        loop_counter += 1
                         continue 
 
-                    # Priorité 2 : Si plus de matchs, on récupère l'historique du prochain joueur
+                    # PRIORITÉ 2 : Dépiler les Joueurs connus (Recherche d'historique)
                     processed_player = await service.process_next_player()
                     if processed_player:
                         logger.info(f"Historique récupéré pour le joueur : {processed_player}")
+                        loop_counter += 1
                         continue
 
-                    # Si on arrive ici, c'est que les deux files (Matches et Players) sont vides
-                    # Si on arrive ici, c'est que les deux files sont vides
-                    logger.info("Crawler en veille : 0 match, 0 joueur en file d'attente.")
+                    # PRIORITÉ 3 PONDÉRÉE : Traduction des Summoners (Snowball de division)
+                    # On ne le fait que si les autres files sont vides, ou 1 fois sur 10.
+                    if loop_counter % 10 == 0:
+                        processed_summoner = await service.process_next_summoner()
+                        if processed_summoner:
+                            logger.info(f"Summoner traduit en PUUID : {processed_summoner}")
+                            loop_counter += 1
+                            continue
+
+                    logger.info("Crawler en veille : Files d'attente vides.")
                     await asyncio.sleep(5)
+                    loop_counter += 1 # Incrémente même en veille pour débloquer le modulo
 
                 except Exception as e:
                     logger.error(f"Erreur inattendue dans la boucle principale du worker : {e}")
-                    # En cas d'erreur lourde (ex: perte de connexion DB), on attend avant de réessayer
                     await asyncio.sleep(5)
 
         logger.info("Worker arrêté proprement.")
