@@ -43,3 +43,4 @@ export const formatters = {
 export const getWinrateColorClass = (wr) => {
     return wr >= 50 ? 'text-lol-win' : 'text-lol-loss';
 };
+

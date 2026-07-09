@@ -29,6 +29,7 @@ const QUEUE_MAPPING = {
     440: 'Classé Flex',
     450: 'ARAM',
     700: 'Clash',
+    710: 'Ranked 5s'
 };
 
 const KEYSTONE_PATHS = {

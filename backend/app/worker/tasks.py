@@ -18,6 +18,8 @@ MODIFICATIONS :
 - CORRECTION SPATIALE : Mapping exhaustif des coordonnées de pathing (pos_f1_x à 
   pos_f3_y) issues du trimmer vers les requêtes d'insertion et de mise à jour 
   SQL pour hydrater la vue Premier Clear.
+- AJOUT MODE DE JEU : Intégration de la file 710 (Ranked 5s) dans la liste 
+  des modes autorisés pour l'ingestion et le téléchargement des timelines.
 ===============================================================================
 """
 
@@ -39,6 +41,7 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
     """
     Tâche principale de téléchargement, filtrage et ingestion des parties.
     Analyse le mode de jeu et assure la persistance des registres anti-doublon.
+    Accepte désormais la nouvelle file 710 (Ranked 5s) introduite mi-saison 16.
     """
     riot_client: RiotClient = ctx["riot_client"]
     
@@ -53,7 +56,8 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
         queue_id = match_data["info"].get("queueId")
         
         # 2. Sécurité et filtrage des modes de jeu (Late Filtering)
-        if queue_id not in [420, 440, 400, 490]:
+        # Inclusion explicite du mode Ranked 5s (710)
+        if queue_id not in [420, 440, 400, 490, 710]:
             async with AsyncSessionLocal() as session:
                 stmt_ignored = insert(Match).values(
                     match_id=match_id,
@@ -198,7 +202,7 @@ async def process_match_ingestion(ctx, match_id: str, continent: str, fetch_time
     except Exception as e:
         logger.error(f"Erreur inattendue sur {match_id}: {str(e)}")
         return {"status": "failed", "reason": str(e)}
-
+    
 async def process_timeline_only(ctx, match_id: str, continent: str):
     """
     Tâche d'extraction chirurgicale pour récupérer a posteriori une timeline manquante.
