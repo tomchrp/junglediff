@@ -75,6 +75,24 @@
     animation: shimmer 2s infinite;
   }
 
+/* * Séparateurs temporels discrets (Scroll) 
+   * Remplace les anciens bandeaux pleins par des pilules flottantes
+   */
+  .glass-pill {
+    @apply bg-surface/40 backdrop-blur-md border border-border-glass shadow-sm rounded-full px-4 py-1 text-xs font-bold tracking-widest uppercase z-20 inline-flex items-center justify-center;
+  }
+
+  /* * Interactivité : Glow standardisé pour les actions primaires 
+   * Extrait de la SearchBar pour devenir une classe réutilisable
+   */
+  .btn-glow {
+    @apply transition-shadow duration-300;
+  }
+  
+  .btn-glow:hover:not(:disabled) {
+    box-shadow: 0 0 12px 0 rgba(200, 170, 110, 0.4); /* Teinte lol-gold */
+  }  
+
   /* Esthétique de la barre de défilement (inchangée, déjà adaptée au thème) */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;

@@ -20,12 +20,20 @@ import React from 'react';
  */
 const StatBadge = ({
     children,
-    colorClass = "text-lol-textMuted",
-    positionClass = "-bottom-2 left-1/2 -translate-x-1/2",
-    className = ""
+    intent = "neutral",
+    positionClass = "-bottom-2 left-1/2 -translate-x-1/2"
 }) => {
+    // Dictionnaire strict des variantes du Design System
+    const intentStyles = {
+        highlight: "text-lol-gold",       // Performance exceptionnelle / Top Tier
+        neutral: "text-lol-textMuted",    // Information standard (Gris)
+        raw: "text-white"                 // Donnée brute
+    };
+
+    const resolvedColor = intentStyles[intent] || intentStyles.neutral;
+
     return (
-        <div className={`absolute ${positionClass} min-w-[20px] h-4 px-1.5 bg-surface-solid border border-border-strong rounded-md flex items-center justify-center text-[10px] font-bold shadow-sm z-10 ${colorClass} ${className}`}>
+        <div className={`absolute ${positionClass} min-w-[20px] h-4 px-1.5 bg-surface-solid border border-border-strong rounded-md flex items-center justify-center text-[10px] font-bold shadow-sm z-10 ${resolvedColor}`}>
             {children}
         </div>
     );

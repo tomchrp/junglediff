@@ -171,14 +171,14 @@ const MatchList = ({
     const structuredData = getStructuredHistory();
 
     return (
-        <div ref={scrollRef} className="flex flex-col w-full flex-1 overflow-y-auto custom-scrollbar pr-2 min-h-0 relative bg-transparent">
+        <div ref={scrollRef} className="flex flex-col w-full flex-1 overflow-y-auto custom-scrollbar pr-2 min-h-0 relative">
 
             {isInitialLoading && (
-                <div className="absolute inset-0 z-50 bg-app/60 backdrop-blur-md flex flex-col items-center justify-center rounded-xl">
-                    <div className="shimmer-wrapper w-[400px] h-32 p-6 flex flex-col items-center justify-center border border-border-glass bg-surface-elevated/50 shadow-glass">
+                <div className="absolute inset-0 z-50 bg-app/40 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
+                    <div className="glass-panel w-[400px] p-8 flex flex-col items-center justify-center">
                         <div className="w-10 h-10 border-4 border-lol-gold border-t-transparent rounded-full animate-spin mb-4"></div>
                         <p className="text-lol-gold font-bold tracking-widest uppercase text-sm drop-shadow-md">Synchronisation des données...</p>
-                        <p className="text-gray-300 text-xs mt-1">L'observateur analyse votre profil</p>
+                        <p className="text-gray-300 text-xs mt-2">L'observateur analyse votre profil</p>
                     </div>
                 </div>
             )}
@@ -190,32 +190,28 @@ const MatchList = ({
             )}
 
             {Object.keys(structuredData).map((patch) => (
-                <div key={patch} className="bg-transparent">
-                    {/* Divider Patch : Compensation du mb-3 des MatchCards précédentes avec mt-1 */}
-                    <div className="sticky top-0 z-20 mt-1 mb-4 flex items-center justify-center bg-transparent backdrop-blur-none pointer-events-none w-full">
-                        <div className="bg-black/40 border border-border-glass/80 backdrop-blur-md rounded-full px-6 py-1 flex items-center justify-center shadow-glass pointer-events-auto">
-                            <span className="text-lol-gold text-xs font-bold tracking-widest uppercase drop-shadow-md">
-                                PATCH {patch}
-                            </span>
+                <div key={patch} className="flex flex-col">
+                    {/* Divider Patch : Pilule flottante (.glass-pill) */}
+                    <div className="sticky top-2 z-20 mb-4 flex justify-center pointer-events-none w-full">
+                        <div className="glass-pill pointer-events-auto text-lol-gold">
+                            PATCH {patch}
                         </div>
                     </div>
 
                     {Object.keys(structuredData[patch]).map((dateLabel) => (
-                        <div key={dateLabel} className="bg-transparent">
-                            {/* Divider Date : Décalage top-10 pour ne pas coller au Patch, compensation avec mt-1 */}
-                            <div className="sticky top-10 z-10 mt-1 mb-4 flex items-center justify-center bg-transparent backdrop-blur-none pointer-events-none w-full">
-                                <div className="bg-black/30 border border-border-glass/40 backdrop-blur-sm rounded-full px-4 py-0.5 flex items-center justify-center shadow-sm pointer-events-auto">
-                                    <span className="text-lol-textMuted text-[10px] font-bold uppercase tracking-wider drop-shadow-md">
-                                        {dateLabel}
-                                    </span>
+                        <div key={dateLabel} className="flex flex-col">
+                            {/* Divider Date : Pilule flottante décalée sous le Patch */}
+                            <div className="sticky top-12 z-10 mb-4 flex justify-center pointer-events-none w-full">
+                                <div className="glass-pill pointer-events-auto text-[10px] text-lol-textMuted">
+                                    {dateLabel}
                                 </div>
                             </div>
 
-                            <div className="bg-transparent flex flex-col">
+                            <div className="flex flex-col gap-3 mb-4">
                                 {structuredData[patch][dateLabel].map((match, idx) => (
                                     <div
                                         key={match.info.gameId}
-                                        className="animate-fade-in opacity-0 bg-transparent"
+                                        className="animate-fade-in opacity-0"
                                         style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
                                     >
                                         <MatchCard
@@ -238,12 +234,12 @@ const MatchList = ({
             {hasMoreLocal && matches.length > 0 && (
                 <div
                     ref={loadingRef}
-                    className="w-full h-20 flex justify-center items-center shrink-0 bg-transparent"
+                    className="w-full h-20 flex justify-center items-center shrink-0"
                     style={{ overflowAnchor: 'none' }}
                 >
                     {isLoading && (
-                        <div className="shimmer-wrapper w-32 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
-                            <div className="w-5 h-5 border-2 border-lol-gold border-t-transparent rounded-full animate-spin z-20"></div>
+                        <div className="glass-pill py-2">
+                            <div className="w-5 h-5 border-2 border-lol-gold border-t-transparent rounded-full animate-spin"></div>
                         </div>
                     )}
                 </div>
@@ -253,7 +249,7 @@ const MatchList = ({
                 <button
                     onClick={loadMoreMatches}
                     disabled={isLoading}
-                    className="my-4 glass-panel-interactive text-lol-gold font-bold py-3 w-full text-center disabled:opacity-50 text-sm cursor-pointer shadow-glass-elevated hover:bg-white/5"
+                    className="my-4 glass-panel-interactive btn-glow text-lol-gold font-bold py-3 w-full text-center disabled:opacity-50 text-sm cursor-pointer"
                 >
                     {isLoading
                         ? 'Exploration des archives...'

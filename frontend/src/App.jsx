@@ -493,9 +493,9 @@ function App() {
 
               {/* VUE : Analyse du First Clear Jungle */}
               {currentMainView === 'PREMIER_CLEAR' && (
-                <div className="flex flex-col flex-1 min-h-0 bg-surface-solid rounded-lg border border-border-glass p-6 overflow-y-auto">
-                  <h2 className="text-xl font-bold text-gray-100 mb-2 text-center">Analyse du Premier Clear</h2>
-                  <p className="text-center text-lol-info mb-6 text-sm">Le filtre de contexte est verrouillé sur le rôle de Jungler.</p>
+                <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+                  <h2 className="text-xl font-bold text-gray-100 mb-2 text-center drop-shadow-md">Analyse du Premier Clear</h2>
+                  <p className="text-center text-lol-info mb-6 text-sm drop-shadow">Le filtre de contexte est verrouillé sur le rôle de Jungler.</p>
 
                   <JunglePathingMap data={junglePaths} activeTeam={activeTeam} />
                 </div>

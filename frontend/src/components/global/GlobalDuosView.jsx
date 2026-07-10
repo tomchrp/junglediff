@@ -68,21 +68,22 @@ const GlobalDuosView = ({ primaryLane, secondaryLane, versionDDragon, championMa
 
     const masterContent = (
         <>
-            <div className="shrink-0 flex items-center justify-between border-b border-border-glass px-4 py-3">
-                <h2 className="text-lol-gold font-bold uppercase tracking-widest text-sm">
+            {/* Header nettoyé pour flotter sans bordure dure */}
+            <div className="shrink-0 flex items-center justify-between px-2 py-3 mb-2">
+                <h2 className="text-lol-gold font-bold uppercase tracking-widest text-sm drop-shadow-md">
                     Classement des synergies
                 </h2>
-                <span className="text-xs text-lol-textMuted">{duosList.length} combinaisons uniques</span>
+                <span className="text-xs text-lol-textMuted drop-shadow-sm">{duosList.length} combinaisons uniques</span>
             </div>
 
             {isLoading && duosList.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center">
-                    <span className="animate-pulse text-lol-gold font-bold uppercase tracking-widest text-sm">
+                    <span className="animate-pulse text-lol-gold font-bold uppercase tracking-widest text-sm glass-pill">
                         Extraction depuis le Data Lake...
                     </span>
                 </div>
             ) : error ? (
-                <div className="p-6 text-lol-loss text-sm">{error}</div>
+                <div className="p-6 text-lol-loss text-sm glass-panel">{error}</div>
             ) : (
                 <DuoList
                     data={duosList}
@@ -109,10 +110,10 @@ const GlobalDuosView = ({ primaryLane, secondaryLane, versionDDragon, championMa
     return (
         <SplitDataViewLayout
             masterContent={masterContent}
-            masterContainerClassName="glass-panel"
+            masterContainerClassName="flex flex-col flex-1 min-h-0" // Suppression du glass-panel encadrant
             detailContent={detailContent}
             isDetailOpen={!!selectedDuo}
-            detailContainerClassName="glass-panel p-4"
+            detailContainerClassName="glass-panel p-4 shadow-glass-elevated"
         />
     );
 };

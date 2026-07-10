@@ -146,11 +146,11 @@ const SearchBar = ({ isSyncing }) => {
                     )}
                 </div>
 
-                {/* Bouton avec retour physique du Glassmorphism Interactive */}
+                {/* Bouton avec retour physique du Glassmorphism Interactive et Glow unifié */}
                 <button
                     type="submit"
                     disabled={isSyncing || !riotId}
-                    className="glass-panel-interactive px-6 py-2 text-sm font-bold text-lol-gold uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-glow-gold flex items-center justify-center gap-2 min-w-[140px] h-[42px]"
+                    className="glass-panel-interactive btn-glow px-6 py-2 text-sm font-bold text-lol-gold uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-[140px] h-[42px]"
                 >
                     {isSyncing ? (
                         <>

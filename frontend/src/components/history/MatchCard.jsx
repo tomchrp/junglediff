@@ -226,7 +226,6 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                 {/* 2. Bloc Affrontement (Matchup) */}
                 <div className="flex items-center justify-center w-[80px] shrink-0 relative z-10">
                     <div className="relative w-[80px] h-16">
-                        {/* Bloc Affrontement (Matchup) - Autour de la ligne 215 */}
                         {opponent && (
                             <div className="absolute top-0 right-0 z-0 opacity-80">
                                 <Avatar
@@ -236,7 +235,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                     alt="Opponent"
                                     className="brightness-75 grayscale-[20%]"
                                 />
-                                <StatBadge positionClass="-bottom-1 -right-1" colorClass="text-lol-textMuted">
+                                <StatBadge positionClass="-bottom-1 -right-1" intent="neutral">
                                     VS
                                 </StatBadge>
                             </div>

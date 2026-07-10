@@ -6,19 +6,25 @@
  * DESCRIPTION :
  * Carte de profil du joueur affichée en haut de la Sidebar.
  * * MODIFICATIONS RECENTES :
- * - DESIGN SYSTEM : Remplacement de l'image native par le composant <Avatar>.
- * - UX : Ajout de l'affichage du classement (Elo) sous les identifiants.
+ * - UX : Ajout d'un affichage "Non Classé" explicite si les données de 
+ * classement sont nulles pour valider le fonctionnement de la pipeline.
+ * - DESIGN SYSTEM : Intégration de l'icône de rang pointant vers les assets 
+ * statiques locaux (/assets/ranked/).
  * ============================================================================
  */
 
 import React from 'react';
-import Avatar from '../ui/Avatar.jsx'; // Ajout de l'import obligatoire du Design System
+import Avatar from '../ui/Avatar.jsx';
 import StatBadge from '../ui/StatBadge.jsx';
 
 const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, versionDDragon }) => {
     if (!summary) return null;
 
-    // Calcul dynamique basé sur le filtre actif (championStats)
+    /**
+     * Calcule les statistiques globales du joueur.
+     * Si des filtres sont appliqués (championStats), recalcule le total 
+     * des parties et le winrate dynamiquement. Sinon, utilise les données brutes.
+     */
     const totalGames = championStats.length > 0
         ? championStats.reduce((acc, curr) => acc + curr.gamesPlayed, 0)
         : summary.totalGames || 0;
@@ -33,6 +39,10 @@ const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, vers
 
     const winrateColor = winrate >= 50 ? 'text-lol-win' : 'text-lol-loss';
 
+    // Détermination de la validité de l'Elo et génération du chemin d'image
+    const hasRank = summary.tier && summary.rank;
+    const rankIconPath = hasRank ? `/assets/ranked/${summary.tier.toLowerCase()}.png` : null;
+
     return (
         <div className="glass-panel p-5 flex flex-col items-center relative overflow-hidden shrink-0">
             <div className="relative mb-3">
@@ -43,7 +53,7 @@ const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, vers
                     alt="Profile"
                     className="w-20 h-20 shadow-glass"
                 />
-                <StatBadge colorClass="text-lol-gold">
+                <StatBadge intent="highlight">
                     {summary.summonerLevel}
                 </StatBadge>
             </div>
@@ -51,15 +61,30 @@ const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, vers
             <h2 className="text-xl font-bold text-gray-100 text-center drop-shadow-md">
                 {summary.riotIdGameName}
             </h2>
-            <div className="text-lol-textMuted text-xs mb-4 font-medium tracking-wide">
+            <div className="text-lol-textMuted text-xs mb-3 font-medium tracking-wide">
                 #{summary.riotIdTagline}
             </div>
 
-            {summary.tier && summary.rank && (
-                <div className="text-lol-gold text-[10px] font-bold mt-1.5 mb-2 tracking-widest uppercase bg-black/40 px-2 py-1 rounded-md border border-lol-gold/30">
-                    {summary.tier} {summary.rank} {summary.leaguePoints !== undefined ? ` - ${summary.leaguePoints} LP` : ''}
-                </div>
-            )}
+            {/* Bloc d'affichage du Classement avec gestion du statut Non Classé */}
+            <div className="flex items-center justify-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-border-glass mb-4 shadow-inner min-h-[36px] min-w-[120px]">
+                {hasRank ? (
+                    <>
+                        <img
+                            src={rankIconPath}
+                            alt={summary.tier}
+                            className="w-6 h-6 drop-shadow-md"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                        <div className="text-lol-gold text-[10px] font-bold tracking-widest uppercase">
+                            {summary.tier} {summary.rank} {summary.leaguePoints !== undefined ? ` - ${summary.leaguePoints} LP` : ''}
+                        </div>
+                    </>
+                ) : (
+                    <div className="text-lol-textMuted text-[10px] font-bold tracking-widest uppercase italic">
+                        Non classé
+                    </div>
+                )}
+            </div>
 
             <div className="w-full bg-black/20 rounded-lg p-3 border border-border-glass shadow-inner mb-4 flex justify-around text-center">
                 <div>

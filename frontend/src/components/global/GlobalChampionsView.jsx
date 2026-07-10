@@ -162,22 +162,22 @@ export default function GlobalChampionsView({ versionDDragon, championMap }) {
                     </div>
                 )}
 
-                {/* Tableau Classique : Augmenté avec la répartition par Lane */}
-                <div className="glass-panel overflow-hidden">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-surface-elevated text-xs uppercase text-lol-textMuted border-b border-border-strong">
+                {/* Tableau Classique : Augmenté avec la répartition par Lane et rendu sans fond */}
+                <div className="flex flex-col overflow-hidden">
+                    <table className="w-full text-sm text-left border-separate" style={{ borderSpacing: '0 8px' }}>
+                        <thead className="text-xs uppercase text-lol-textMuted">
                             <tr>
-                                <th className="px-6 py-4 font-bold w-16">Champion</th>
-                                <th className="px-6 py-4 font-bold">Répartition par Lane</th>
-                                <th className="px-6 py-4 font-bold w-32">Total Parties</th>
-                                <th className="px-6 py-4 font-bold w-32">Winrate</th>
-                                <th className="px-6 py-4 font-bold w-32">KDA Moyen</th>
+                                <th className="px-6 py-2 font-bold w-16 drop-shadow-sm">Champion</th>
+                                <th className="px-6 py-2 font-bold drop-shadow-sm">Répartition par Lane</th>
+                                <th className="px-6 py-2 font-bold w-32 drop-shadow-sm">Total Parties</th>
+                                <th className="px-6 py-2 font-bold w-32 drop-shadow-sm">Winrate</th>
+                                <th className="px-6 py-2 font-bold w-32 drop-shadow-sm">KDA Moyen</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-border-glass">
+                        <tbody>
                             {stats.slice(0, 100).map((champ) => (
-                                <tr key={champ.champion_id} className="hover:bg-surface-elevated/30 transition-colors">
-                                    <td className="px-6 py-3">
+                                <tr key={champ.champion_id} className="bg-surface/40 backdrop-blur-md hover:bg-surface-elevated transition-colors shadow-sm">
+                                    <td className="px-6 py-3 rounded-l-xl">
                                         <Avatar
                                             src={championMap && championMap[champ.champion_id] ? `https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/champion/${championMap[champ.champion_id].replace(/\s+/g, '')}.png` : undefined}
                                             type="champion"
@@ -186,11 +186,10 @@ export default function GlobalChampionsView({ versionDDragon, championMap }) {
                                     </td>
                                     <td className="px-6 py-3">
                                         <div className="flex flex-wrap gap-2">
-                                            {/* Sécurisation HMR avec fallback objet vide */}
                                             {Object.entries(champ.lanes || {})
                                                 .sort((a, b) => b[1] - a[1])
                                                 .map(([lane, count]) => (
-                                                    <span key={lane} className="text-xs px-2 py-1 rounded bg-surface-solid border border-border-strong text-gray-300">
+                                                    <span key={lane} className="text-xs px-2 py-1 rounded bg-black/40 shadow-inner border border-border-glass text-gray-300">
                                                         {lane.substring(0, 3)}: <span className="text-lol-gold font-bold ml-1">{count}</span>
                                                     </span>
                                                 ))}
@@ -202,7 +201,7 @@ export default function GlobalChampionsView({ versionDDragon, championMap }) {
                                     <td className={`px-6 py-3 font-bold tabular-nums ${champ.winrate >= 50 ? 'text-lol-win' : 'text-lol-loss'}`}>
                                         {champ.winrate}%
                                     </td>
-                                    <td className="px-6 py-3 text-gray-400 tabular-nums">
+                                    <td className="px-6 py-3 text-gray-400 tabular-nums rounded-r-xl">
                                         {champ.kda.k} / {champ.kda.d} / {champ.kda.a}
                                     </td>
                                 </tr>

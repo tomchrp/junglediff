@@ -47,7 +47,16 @@ class SyncService:
     async def sync_player_profile(self, server: str, game_name: str, tag_line: str) -> Dict[str, Any]:
         """
         Coordonne le rafraîchissement complet du profil d'un joueur et planifie 
-        l'ingestion des 60 derniers matchs de façon strictement linéaire.
+        l'ingestion des 60 derniers matchs.
+        
+        Logique de la fonction :
+        1. Traduit le Riot ID en PUUID.
+        2. Récupère le profil Summoner-V4 (Niveau, Icône, SummonerId).
+        3. Extrait l'Elo via League-V4 en priorisant la SoloQ, avec repli sur la Flex.
+        4. Exécute le Global Fetch pour l'historique.
+        5. Filtre les parties déjà existantes en base locale.
+        6. Persiste le profil complet.
+        7. Envoie les nouvelles parties dans la file ARQ.
         """
         routing = self.client.get_routing(server)
         continent = routing["continent"]
@@ -64,23 +73,33 @@ class SyncService:
         if not summoner_data:
             return {"error": f"Impossible de récupérer le profil sur le serveur {server}."}
 
-        # 3. Traitement des ligues et des points d'étape classés
+        # 3. Traitement des ligues avec système de priorité (SoloQ > Flex)
         summoner_id = summoner_data.get("id")
         tier, rank, lp = None, None, None
         
         if summoner_id:
-            league_data = await self.client.get_league_entries(region, summoner_id, fail_fast=True)
+            league_data = await self.client.get_league_entries_by_summoner(region, summoner_id, fail_fast=True)
+            flex_data = None
+            
             for entry in league_data:
                 if entry.get("queueType") == "RANKED_SOLO_5x5":
                     tier = entry.get("tier")
                     rank = entry.get("rank")
                     lp = entry.get("leaguePoints")
                     break
+                elif entry.get("queueType") == "RANKED_FLEX_SR":
+                    flex_data = entry
+            
+            # Application du fallback si aucune donnée SoloQ n'a été trouvée
+            if not tier and flex_data:
+                tier = flex_data.get("tier")
+                rank = flex_data.get("rank")
+                lp = flex_data.get("leaguePoints")
 
-        # 4. Exécution du Global Fetch (Agnostique du mode de jeu au niveau de la requête API)
+        # 4. Exécution du Global Fetch
         all_fetched_ids = await self.client.get_match_ids(continent, puuid, start=0, count=60, fail_fast=True)
         
-        # 5. Détermination des deltas d'ingestion (Filtre anti-doublon SQL local)
+        # 5. Détermination des deltas d'ingestion (Filtre anti-doublon)
         new_match_ids = []
         if all_fetched_ids:
             query = select(Match.match_id).where(Match.match_id.in_(all_fetched_ids))
@@ -137,45 +156,6 @@ class SyncService:
             "new_matches_found": len(new_match_ids),
             "tasks_enqueued": tasks_enqueued,
             "warning": "Rank ignoré (absence d'ID Riot)" if not summoner_id else None
-        }
-
-    async def fetch_older_matches(self, server: str, puuid: str, start_index: int) -> Dict[str, Any]:
-        """
-        Requête un segment d'historique lointain dans le cadre du défilement infini.
-        Garantit le respect de l'alignement linéaire de l'axe temporel.
-        """
-        routing = self.client.get_routing(server)
-        continent = routing["continent"]
-
-        all_fetched_ids = await self.client.get_match_ids(continent, puuid, start=start_index, count=60)
-                
-        new_match_ids = []
-        if all_fetched_ids:
-            query = select(Match.match_id).where(Match.match_id.in_(all_fetched_ids))
-            result = await self.db.execute(query)
-            existing_ids = set(result.scalars().all())
-            new_match_ids = [m_id for m_id in all_fetched_ids if m_id not in existing_ids]
-
-        tasks_enqueued = 0
-        if new_match_ids:
-            redis_pool = await create_pool(RedisSettings.from_dsn(settings.REDIS_URL))
-            for m_id in new_match_ids:
-                await redis_pool.enqueue_job(
-                    'process_match_ingestion', 
-                    m_id, 
-                    continent, 
-                    False, 
-                    _job_id=f"ingest_{m_id}",
-                    _queue_name='default'
-                )
-                tasks_enqueued += 1
-            await redis_pool.aclose()
-
-        return {
-            "status": "success",
-            "start_index": start_index,
-            "new_matches_found": len(new_match_ids),
-            "tasks_enqueued": tasks_enqueued
         }
     
     async def trigger_timeline_prefetch(self, target_ids: List[str], server: str) -> Dict[str, Any]:

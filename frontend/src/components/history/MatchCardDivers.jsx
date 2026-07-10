@@ -87,7 +87,7 @@ const MatchCardDivers = ({ currentPlayer, opponent, versionDDragon, championName
                                         </div>
                                     )}
                                 </div>
-                                <StatBadge colorClass="text-gray-100">
+                                <StatBadge intent="raw">
                                     {casts || 0}
                                 </StatBadge>
                             </div>
@@ -108,7 +108,7 @@ const MatchCardDivers = ({ currentPlayer, opponent, versionDDragon, championName
                                         className="w-full h-full object-cover"
                                     />
                                 </div>
-                                <StatBadge colorClass="text-gray-100">
+                                <StatBadge intent="raw">
                                     {sum.casts || 0}
                                 </StatBadge>
                             </div>
