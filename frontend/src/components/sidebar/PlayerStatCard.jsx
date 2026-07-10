@@ -6,15 +6,14 @@
  * DESCRIPTION :
  * Carte de profil du joueur affichée en haut de la Sidebar.
  * * MODIFICATIONS RECENTES :
- * - CORRECTION UI : Ajout de la classe `shrink-0` sur le conteneur principal.
- * Cela empêche Flexbox de compresser la carte et de cacher son contenu 
- * lorsque la liste des champions située en dessous devient trop longue.
- * - CORRECTION SYNTAXE : Suppression du commentaire JSX invalide à la racine 
- * du return.
+ * - DESIGN SYSTEM : Remplacement de l'image native par le composant <Avatar>.
+ * - UX : Ajout de l'affichage du classement (Elo) sous les identifiants.
  * ============================================================================
  */
 
 import React from 'react';
+import Avatar from '../ui/Avatar.jsx'; // Ajout de l'import obligatoire du Design System
+import StatBadge from '../ui/StatBadge.jsx';
 
 const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, versionDDragon }) => {
     if (!summary) return null;
@@ -34,18 +33,19 @@ const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, vers
 
     const winrateColor = winrate >= 50 ? 'text-lol-win' : 'text-lol-loss';
 
-    // Ajout de shrink-0 sur la div principale pour interdire l'écrasement Flexbox
     return (
         <div className="glass-panel p-5 flex flex-col items-center relative overflow-hidden shrink-0">
             <div className="relative mb-3">
-                <img
+                <Avatar
+                    type="profile"
+                    size="lg"
                     src={`https://ddragon.leagueoflegends.com/cdn/${versionDDragon}/img/profileicon/${summary.profileIconId}.png`}
                     alt="Profile"
-                    className="w-20 h-20 rounded-full border-2 border-border-strong shadow-glass"
+                    className="w-20 h-20 shadow-glass"
                 />
-                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-surface-solid border border-border-glass text-lol-gold text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                <StatBadge colorClass="text-lol-gold">
                     {summary.summonerLevel}
-                </div>
+                </StatBadge>
             </div>
 
             <h2 className="text-xl font-bold text-gray-100 text-center drop-shadow-md">
@@ -54,6 +54,12 @@ const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, vers
             <div className="text-lol-textMuted text-xs mb-4 font-medium tracking-wide">
                 #{summary.riotIdTagline}
             </div>
+
+            {summary.tier && summary.rank && (
+                <div className="text-lol-gold text-[10px] font-bold mt-1.5 mb-2 tracking-widest uppercase bg-black/40 px-2 py-1 rounded-md border border-lol-gold/30">
+                    {summary.tier} {summary.rank} {summary.leaguePoints !== undefined ? ` - ${summary.leaguePoints} LP` : ''}
+                </div>
+            )}
 
             <div className="w-full bg-black/20 rounded-lg p-3 border border-border-glass shadow-inner mb-4 flex justify-around text-center">
                 <div>
@@ -69,7 +75,7 @@ const PlayerStatCard = ({ summary, championStats = [], onUpdate, isSyncing, vers
             <button
                 onClick={onUpdate}
                 disabled={isSyncing}
-                className="w-full py-2 bg-black/30 hover:bg-white/5 border border-border-glass rounded-lg text-xs font-bold text-lol-gold uppercase tracking-widest transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2 bg-black/30 hover:bg-white/5 border border-transparent hover:border-border-glass rounded-lg text-xs font-bold text-lol-gold uppercase tracking-widest transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {isSyncing ? 'Mise à jour...' : 'Actualiser le profil'}
             </button>

@@ -18,6 +18,7 @@ import MatchCardSummary from './MatchCardSummary.jsx';
 import MatchCardDivers from './MatchCardDivers.jsx';
 import RoleAnalysisController from './roles/RoleAnalysisController.jsx';
 import Avatar from '../ui/Avatar.jsx';
+import StatBadge from '../ui/StatBadge.jsx';
 
 const SUMMONER_SPELLS = { 4: "SummonerFlash", 11: "SummonerSmite", 12: "SummonerTeleport", 14: "SummonerDot", 7: "SummonerHeal", 6: "SummonerHaste", 3: "SummonerExhaust", 21: "SummonerBarrier", 1: "SummonerBoost", 32: "SummonerSnowball" };
 const RUNE_PATHS = { 8000: "7201_Precision", 8100: "7200_Domination", 8200: "7202_Sorcery", 8300: "7203_Whimsy", 8400: "7204_Resolve" };
@@ -225,6 +226,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                 {/* 2. Bloc Affrontement (Matchup) */}
                 <div className="flex items-center justify-center w-[80px] shrink-0 relative z-10">
                     <div className="relative w-[80px] h-16">
+                        {/* Bloc Affrontement (Matchup) - Autour de la ligne 215 */}
                         {opponent && (
                             <div className="absolute top-0 right-0 z-0 opacity-80">
                                 <Avatar
@@ -234,9 +236,9 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
                                     alt="Opponent"
                                     className="brightness-75 grayscale-[20%]"
                                 />
-                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-surface-solid border border-border-strong rounded-md flex items-center justify-center text-[9px] font-bold text-lol-textMuted shadow-sm z-10">
+                                <StatBadge positionClass="-bottom-1 -right-1" colorClass="text-lol-textMuted">
                                     VS
-                                </div>
+                                </StatBadge>
                             </div>
                         )}
                         <div className="absolute bottom-0 left-0 z-10">
@@ -364,7 +366,7 @@ const MatchCard = ({ match, matchList = [], playerPuuid, versionDDragon, champio
 
             {/* ACCORDÉON DÉROULANT */}
             {isOpen && (
-                <div className="glass-panel border-t-0 rounded-t-none bg-surface-solid/80 p-3 relative z-10 animate-[fadeIn_0.2s_ease-out]">
+                <div className="glass-panel border-t-0 rounded-t-none bg-black/30 p-3 relative z-10 animate-[fadeIn_0.2s_ease-out]">
                     <div className="flex gap-4 border-b border-border-glass pb-2 mb-2 px-2">
                         <button onClick={() => setActiveTab('resume')} className={`text-[11px] font-bold uppercase tracking-widest transition-colors pb-1 ${activeTab === 'resume' ? 'text-lol-gold border-b-2 border-lol-gold drop-shadow-md' : 'text-lol-textMuted hover:text-gray-200'}`}>
                             Résumé

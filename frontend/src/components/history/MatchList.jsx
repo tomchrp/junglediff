@@ -171,7 +171,7 @@ const MatchList = ({
     const structuredData = getStructuredHistory();
 
     return (
-        <div ref={scrollRef} className="flex flex-col w-full flex-1 overflow-y-auto custom-scrollbar pr-2 min-h-0 relative">
+        <div ref={scrollRef} className="flex flex-col w-full flex-1 overflow-y-auto custom-scrollbar pr-2 min-h-0 relative bg-transparent">
 
             {isInitialLoading && (
                 <div className="absolute inset-0 z-50 bg-app/60 backdrop-blur-md flex flex-col items-center justify-center rounded-xl">
@@ -190,31 +190,32 @@ const MatchList = ({
             )}
 
             {Object.keys(structuredData).map((patch) => (
-                <div key={patch}>
-                    {/* Divider Patch avec masque de fondu (Seamless) */}
-                    <div className="sticky top-0 z-20 pt-2 pb-6 -mb-4 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)] flex items-center pointer-events-none">
-                        <div className="flex-1 border-t border-border-strong/30"></div>
-                        <span className="px-4 text-lol-gold text-xs font-bold tracking-widest uppercase drop-shadow-md">
-                            PATCH {patch}
-                        </span>
-                        <div className="flex-1 border-t border-border-strong/30"></div>
+                <div key={patch} className="bg-transparent">
+                    {/* Divider Patch : Compensation du mb-3 des MatchCards précédentes avec mt-1 */}
+                    <div className="sticky top-0 z-20 mt-1 mb-4 flex items-center justify-center bg-transparent backdrop-blur-none pointer-events-none w-full">
+                        <div className="bg-black/40 border border-border-glass/80 backdrop-blur-md rounded-full px-6 py-1 flex items-center justify-center shadow-glass pointer-events-auto">
+                            <span className="text-lol-gold text-xs font-bold tracking-widest uppercase drop-shadow-md">
+                                PATCH {patch}
+                            </span>
+                        </div>
                     </div>
 
                     {Object.keys(structuredData[patch]).map((dateLabel) => (
-                        <div key={dateLabel}>
-                            {/* Divider Date avec masque de fondu (Seamless) */}
-                            <div className="sticky top-8 z-10 pt-2 pb-5 -mb-3 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_60%,transparent_100%)] flex items-center pointer-events-none">
-                                <span className="text-lol-textMuted text-xs font-bold uppercase tracking-wider pr-4 pl-2 drop-shadow-md">
-                                    {dateLabel}
-                                </span>
-                                <div className="flex-1 border-t border-border-glass/50"></div>
+                        <div key={dateLabel} className="bg-transparent">
+                            {/* Divider Date : Décalage top-10 pour ne pas coller au Patch, compensation avec mt-1 */}
+                            <div className="sticky top-10 z-10 mt-1 mb-4 flex items-center justify-center bg-transparent backdrop-blur-none pointer-events-none w-full">
+                                <div className="bg-black/30 border border-border-glass/40 backdrop-blur-sm rounded-full px-4 py-0.5 flex items-center justify-center shadow-sm pointer-events-auto">
+                                    <span className="text-lol-textMuted text-[10px] font-bold uppercase tracking-wider drop-shadow-md">
+                                        {dateLabel}
+                                    </span>
+                                </div>
                             </div>
 
-                            <div className="mb-4">
+                            <div className="bg-transparent flex flex-col">
                                 {structuredData[patch][dateLabel].map((match, idx) => (
                                     <div
                                         key={match.info.gameId}
-                                        className="animate-fade-in opacity-0"
+                                        className="animate-fade-in opacity-0 bg-transparent"
                                         style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
                                     >
                                         <MatchCard
@@ -237,7 +238,7 @@ const MatchList = ({
             {hasMoreLocal && matches.length > 0 && (
                 <div
                     ref={loadingRef}
-                    className="w-full h-20 flex justify-center items-center shrink-0"
+                    className="w-full h-20 flex justify-center items-center shrink-0 bg-transparent"
                     style={{ overflowAnchor: 'none' }}
                 >
                     {isLoading && (
@@ -252,7 +253,7 @@ const MatchList = ({
                 <button
                     onClick={loadMoreMatches}
                     disabled={isLoading}
-                    className="my-4 glass-panel-interactive text-lol-gold font-bold py-3 w-full text-center disabled:opacity-50 text-sm cursor-pointer shadow-glass-elevated hover:shadow-glow-gold"
+                    className="my-4 glass-panel-interactive text-lol-gold font-bold py-3 w-full text-center disabled:opacity-50 text-sm cursor-pointer shadow-glass-elevated hover:bg-white/5"
                 >
                     {isLoading
                         ? 'Exploration des archives...'

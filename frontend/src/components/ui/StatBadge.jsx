@@ -1,20 +1,34 @@
 /**
  * ============================================================================
  * FICHIER : frontend/src/components/ui/StatBadge.jsx
+ * PROJET  : JungleDiff
+ *
  * DESCRIPTION :
- * Primitive visuelle pour l'affichage de données polarisées (ex: Winrate).
- * Centralise la règle métier : Vert si >= 50, Rouge sinon.
+ * Primitive visuelle (UI Kit) pour l'affichage de compteurs ou d'indicateurs 
+ * (Niveau, VS, Stacks) superposés à des éléments graphiques.
+ * * MODIFICATIONS :
+ * - Ajout de la propriété `positionClass` pour permettre l'ancrage dynamique 
+ * par le parent (ex: bas-droite pour le VS, centre-bas par défaut).
  * ============================================================================
  */
 import React from 'react';
 
-export default function StatBadge({ value, suffix = "", threshold = 50 }) {
-    const isSuccess = value >= threshold;
-    const colorClass = isSuccess ? 'text-lol-win' : 'text-lol-loss';
-
+/**
+ * Affiche un badge de statistiques superposé.
+ * * @param {string} positionClass - Classes utilitaires Tailwind pour le positionnement absolu.
+ * @param {string} colorClass - Classe de couleur du texte (jetons sémantiques text-lol-*).
+ */
+const StatBadge = ({
+    children,
+    colorClass = "text-lol-textMuted",
+    positionClass = "-bottom-2 left-1/2 -translate-x-1/2",
+    className = ""
+}) => {
     return (
-        <span className={`font-semibold ${colorClass}`}>
-            {value}{suffix}
-        </span>
+        <div className={`absolute ${positionClass} min-w-[20px] h-4 px-1.5 bg-surface-solid border border-border-strong rounded-md flex items-center justify-center text-[10px] font-bold shadow-sm z-10 ${colorClass} ${className}`}>
+            {children}
+        </div>
     );
-}
+};
+
+export default StatBadge;
